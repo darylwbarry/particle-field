@@ -29,7 +29,8 @@ WALL = 3.0
 FLOOR = 2.0
 LEDGE_Z = 24.0                   # tray rests here
 TRAY_H = 7.0                     # tray body height (top plane = LEDGE_Z + TRAY_H)
-PLATE_T = 1.0                    # diffuser plate thickness (dots go through it)
+PLATE_T = 1.0                    # white diffuser plate thickness
+DOT_DEPTH = 0.2                  # black dots are ONE layer deep, at the particle surface only (tray v2)
 SLOT_CLEAR_Z = 0.6
 SLOT_W = 97.0                    # tray is 96 wide
 TRAY_W, TRAY_D = 96.0, 92.0
@@ -130,9 +131,7 @@ def make_tray():
     zt = TRAY_H
     body = box(0, TRAY_W, 0, TRAY_D, zt - PLATE_T, zt)                    # diffuser plate
     body = body.union(ring(TRAY_W / 2, TRAY_D / 2, TRAY_W, TRAY_D, TRAY_W - 6, TRAY_D - 6, 0, zt))  # frame
-    # stiffening ribs, placed under dot regions only (never under a window)
-    body = body.union(box(LAT_CX + 4 - 0.6, LAT_CX + 4 + 0.6, 3, TRAY_D - 3, 1.5, zt))
-    body = body.union(box(3, TRAY_W - 3, 28 - 0.6, 28 + 0.6, 1.5, zt))
+    # v2: no ribs under the plate. In v1 they showed up as shadow bands across the dot grid when backlit.
     # front face plate (covers slot) + grip
     body = body.union(box(-4, TRAY_W + 4, -3, 0.01, -2, zt))
     body = body.union(cq.Workplane("XY").box(24, 6, zt + 2, centered=(True, False, False))
@@ -141,16 +140,16 @@ def make_tray():
     dots = None
     for (i, j) in DOTS:
         x, y = dot_xy(i, j)
-        c = cq.Workplane("XY").circle(DOT_D / 2).extrude(PLATE_T).translate((LAT_CX + x, LAT_CY + y, zt - PLATE_T))
+        c = cq.Workplane("XY").circle(DOT_D / 2).extrude(DOT_DEPTH).translate((LAT_CX + x, LAT_CY + y, zt - DOT_DEPTH))
         dots = c if dots is None else dots.union(c, clean=False)
     black = dots
     # window corner ticks? no - windows are simply dot-free. Labels in front margin (0.4 mm deep inlay).
     try:
-        lab = (cq.Workplane("XY").workplane(offset=zt - 0.4)
-               .text(f"PITCH {P:.3f} mm  -  MEASURE 30 PITCHES", 3.2, 0.4, kind="bold", halign="center", valign="center")
+        lab = (cq.Workplane("XY").workplane(offset=zt - DOT_DEPTH)
+               .text(f"PARTICLE FIELD  v2  -  PITCH {P:.1f} mm", 3.2, DOT_DEPTH, kind="bold", halign="center", valign="center")
                .translate((TRAY_W / 2, 18, 0)))
-        lab2 = (cq.Workplane("XY").workplane(offset=zt - 0.4)
-                .text("L                    S", 4.0, 0.4, kind="bold", halign="center", valign="center")
+        lab2 = (cq.Workplane("XY").workplane(offset=zt - DOT_DEPTH)
+                .text("L                    S", 4.0, DOT_DEPTH, kind="bold", halign="center", valign="center")
                 .translate((TRAY_W / 2 + 4, 9.5, 0)))
         black = black.union(lab).union(lab2)
     except Exception as e:
@@ -158,6 +157,19 @@ def make_tray():
     # window outline ticks: 4 small L-corner marks just outside each ROI are NOT added (they would look like particles)
     white = body.cut(black)
     return white, black
+
+# ---------------- TEST COUPON (10-minute print to check dot quality before the full tray) ----------------
+def make_coupon(ni=13, nj=9, margin=4.0, t=1.0):
+    """Flat plate, printed dot-face down like the tray. 13 x 9 dots with a 3 x 2 window, so the app reads it as window S."""
+    w, h = (ni - 1) * P + 2 * margin, (nj - 1) * P + 2 * margin
+    body = box(0, w, 0, h, 0, t)
+    black = None
+    for i in range(ni):
+        for j in range(nj):
+            if 5 <= i <= 7 and 4 <= j <= 5: continue
+            c = cq.Workplane("XY").circle(DOT_D / 2).extrude(DOT_DEPTH).translate((margin + i * P, margin + j * P, 0))
+            black = c if black is None else black.union(c, clean=False)
+    return body.cut(black), black
 
 # ---------------- SPACERS ----------------
 def make_spacer(h):
@@ -205,6 +217,7 @@ if __name__ == "__main__":
     # print orientation: top plane down (flip about X), both bodies share the same transform
     flip = lambda s: s.rotate((0, 0, 0), (1, 0, 0), 180).translate((0, 0, TRAY_H))
     export(flip(white), "tray_white"); export(flip(black), "tray_black")
+    cw, cb = make_coupon(); export(cw, "coupon_white"); export(cb, "coupon_black")
     asm_tray = cq.Assembly()
     asm_tray.add(flip(white), name="tray_white", color=cq.Color(0.95, 0.95, 0.95))
     asm_tray.add(flip(black), name="tray_black", color=cq.Color(0.05, 0.05, 0.05))

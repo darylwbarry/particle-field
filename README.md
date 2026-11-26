@@ -74,13 +74,15 @@ coin can't correct tilt. The grid is in the particle plane in every photo.
 
 | Part | File | Colour | Orientation | Notes |
 |---|---|---|---|---|
-| Calibration tray | `tray_2color.3mf` (or `tray_white.stl` + `tray_black.stl`) | **White + Black (AMS)** | Top surface **down** on a smooth plate (as exported) | 0.2 mm layers. Set *Elephant foot compensation = 0* and *X-Y contour/hole compensation = 0*. Prime tower on. The first 5 layers carry the dots |
+| Calibration tray (v2) | `print/1_tray_v2_white+black.3mf` (or `tray_white.stl` + `tray_black.stl`) | **White + Black (AMS)** | Dot face **down** on the plate (as exported) | Print `print/0_test_coupon_white+black.3mf` first (8 min) to check the dots. Black is one layer deep. Settings are in the file and explained in `print/README.md` |
 | Base body | `base_body.stl` | White | Floor down | 15 % infill. White inside = bright, even backlight |
 | Base lid | `base_lid.stl` | Black preferred | Flat roof down | Drops onto 4 pegs. Lift it off to clean out spilled powder |
 | Spacer 10 mm ×1, 20 mm ×2 | `spacer_10.stl`, `spacer_20.stl` | Black | Rim up | Matte black reduces stray reflections |
 | Deck | `deck.stl` | Any | Grooves up | |
 
-**If the 3MF doesn't open as one object with two parts:** drag both tray STLs into Bambu Studio together and
+Ready-made Bambu Studio projects for every part are in `print/`.
+
+**If a 3MF doesn't open as one object with two parts:** drag both tray STLs into Bambu Studio together and
 answer **Yes** to "load as a single object with multiple parts", then set the dots part to the black filament.
 The tray needs an AMS (or AMS lite): the dots and the white diffuser share the same layers, so a
 filament change at a layer height can't produce them. The other parts are single-colour.

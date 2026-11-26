@@ -25,3 +25,8 @@ for f in glob.glob("presets/*.json"):
         if k in fb and isinstance(fb[k],list) and not isinstance(v,list): ov[k]=[v]*len(fb[k])
     d=write(base,"flat/"+os.path.basename(f),ov)
     print(f, d.get("type"), len(d))
+
+# restore what Bambu Studio's command line needs: machine marked as a system preset, user presets keep "inherits"
+m=json.load(open("flat/machine.json")); m["from"]="system"; json.dump(m,open("flat/machine.json","w"),indent=1)
+for f in glob.glob("presets/*.json"):
+    u=json.load(open(f)); t="flat/"+os.path.basename(f); d=json.load(open(t)); d["inherits"]=u["inherits"]; json.dump(d,open(t,"w"),indent=1)
