@@ -4,3 +4,6 @@ android/.gradle/
 android/app/build/
 android/build/
 android/local.properties
+print/_bbl/
+print/log_*.txt
+print/result.json

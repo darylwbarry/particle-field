@@ -1,0 +1,14 @@
+{
+  "type": "filament",
+  "name": "PF PLA Matte Black",
+  "inherits": "Bambu PLA Matte @BBL P1S 0.4 nozzle",
+  "from": "User",
+  "instantiation": "true",
+  "version": "02.09.01.70",
+  "filament_colour": [
+    "#161616"
+  ],
+  "compatible_printers": [
+    "Bambu Lab P1S 0.4 nozzle"
+  ]
+}
