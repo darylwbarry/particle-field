@@ -49,11 +49,16 @@ with reference particles (section 6) before you rely on the numbers.
 
 ### Which phone setup gives enough resolution
 
-| Setup | Typical scale | Window | Verdict |
+| Setup | Typical scale (estimate) | Window | Verdict |
 |---|---|---|---|
-| iPhone 13 Pro or later (auto macro), Androids with a real macro or close-focus ultrawide | 6–10 µm/px | **L** (18 × 12 mm) | meets spec |
-| Any phone + clip-on 10–15× macro lens ($10–20) | 2–5 µm/px | **S** (6 × 4 mm) | meets spec easily, but fewer particles per photo |
-| Main camera at its closest focus (10–15 cm) | 25–40 µm/px | L | **does not** meet 5 % at 200 µm; fine for > 600 µm |
+| **iPhone 14 Plus + clip-on 10–15× macro lens** (the reference setup) | 3–6 µm/px | **S** (6 × 4 mm) | meets spec comfortably |
+| Any phone + clip-on 10–15× macro lens ($10–25) | 2–6 µm/px | **S** | meets spec; fewer particles per photo, so take more photos |
+| iPhone 13 Pro / 14 Pro (auto macro, ultra-wide at ~2 cm), similar Androids | ~10–13 µm/px | **L** (18 × 12 mm) | borderline: 200 µm ≈ 15–20 px; usually amber, needs sharp focus |
+| Main camera at closest focus (iPhone 14 / 14 Plus ≈ 10–15 cm; 14 Pro ≈ 20 cm) | 35–70 µm/px | L | **does not** meet 5 % at 200 µm; OK for particles > ~1 mm |
+
+The iPhone 14 and 14 Plus have **no macro mode**. Their ultra-wide camera is fixed-focus, so on those phones
+the 200 µm spec needs a clip-on lens. These scales are estimates from the camera specs. Your
+phone's real numbers come from the app's **Align camera** live view.
 
 The **Align camera** live view shows the field width, a predicted µm/px and sharpness before you shoot.
 
@@ -94,9 +99,30 @@ Optional: 4 × 10 mm silicone bumper feet (recesses are in the base), and a clip
 4. Phone screen-up on the deck, camera over the aperture. The engraved lines **L** and **S** mark the two window centres.
 
 Phone-back-to-tray distances: no spacer 21 mm, +10 → 31, +20 → 41, +10+20 → 51, +20+20 → 61.
-Typical starting points: iPhone Pro macro **+10 (31 mm)**; clip-on lens **no spacer** (adjust to the lens's working distance); then fine-tune with the live view.
+Typical starting points: clip-on lens **no spacer**; iPhone Pro macro **no spacer** (its ultra-wide focuses down to about 20 mm). Then fine-tune with the live view.
 
 ---
+
+## 3a. Setting up an iPhone 14 Plus with a clip-on macro lens
+
+1. **The lens.** Buy a standalone 10–15× clip-on macro lens, not a wide-angle/macro combo. Note its
+   working distance (the gap from the front of the lens to the subject, typically 10–15 mm) and how far it sticks out from the phone's back.
+2. **Mount it** over the **main (1×) camera**, the lower of the 14 Plus's two lenses. In the Camera app stay at **1×**,
+   because 0.5× uses the other camera and 2× is just a crop.
+3. **Stand height.** Start with **no spacer** (phone back 21 mm above the tray). For the lens to focus, the gap
+   from the lens front to the tray must equal its working distance: 21 mm − lens protrusion ≈ working distance.
+   - If it's sharp only *above* the tray, the lens needs more distance: add the 10 mm spacer.
+   - If it needs to be *closer* than the stand allows, lower the deck. In `cad/stand.py`, reduce `MATE_TO_TRAY`
+     (e.g. from 16 to 10 mm), run `python3 cad/stand.py` and reprint `base_lid`. The app's **Stand height** setting
+     should then be the new phone-to-tray distance.
+4. **Line it up** over window **S**: lay the phone so the clip lens sits in the deck opening on the engraved **S**
+   line. Open **Align camera** and slide the phone until window S is found, the scale shows "resolution OK" and
+   sharpness reads "sharp".
+5. **Shoot.** Use **Take photo**, tap window S to focus, and keep the phone still. Window S is small (6 × 4 mm), so plan
+   on 10–30 photos of fresh sub-samples to reach 500+ particles.
+6. **Particle size limit:** in window S, particles above ~1.5 mm are often cut by the window edge and dropped.
+   For coarse material (mostly > 1 mm), shoot window **L** without the clip lens using the main camera.
+   At that scale it's fine for > 1 mm particles.
 
 ## 4. Field procedure
 1. Pull the drawer out. Sprinkle a small sub-sample thinly over window **L** (or **S**). Tap the tray gently to break up clumps. Aim for particles that mostly don't touch, covering about 10–20 % of the window.
