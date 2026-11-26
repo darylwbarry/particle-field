@@ -1,0 +1,7 @@
+{
+  "appId": "com.particlefield.app",
+  "appName": "Particle Field",
+  "webDir": "www",
+  "android": { "allowMixedContent": false },
+  "ios": { "contentInset": "never" }
+}

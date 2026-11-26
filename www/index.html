@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f3d5e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Particle Field</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f4f6f7; --card:#ffffff; --ink:#14202a; --mute:#5a6872; --line:#d9e0e4; --accent:#0f6fae; --accent-ink:#fff;
+  --good:#11845b; --warn:#b26a00; --bad:#c02f3c; --chip:#eef2f4;
+  --safe-t:env(safe-area-inset-top); --safe-b:env(safe-area-inset-bottom);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size:16px;
+}
+@media (prefers-color-scheme: dark){ :root{ --bg:#0d1418; --card:#152027; --ink:#e6edf1; --mute:#94a5af; --line:#26353e; --accent:#4aa8e8; --accent-ink:#06121a; --chip:#1c2a32; } }
+*{box-sizing:border-box} html,body{margin:0;background:var(--bg);color:var(--ink);-webkit-text-size-adjust:100%}
+header{position:sticky;top:0;z-index:5;background:var(--accent);color:#fff;padding:calc(var(--safe-t) + 10px) 16px 10px;display:flex;align-items:center;gap:10px}
+@media (prefers-color-scheme: dark){ header{background:#0f3d5e} }
+header h1{font-size:18px;margin:0;flex:1;font-weight:650;letter-spacing:.2px}
+header button{background:rgba(255,255,255,.16);border:0;color:#fff;border-radius:10px;padding:8px 12px;font-size:15px}
+main{padding:12px 12px calc(84px + var(--safe-b));max-width:760px;margin:0 auto}
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding-bottom:var(--safe-b);z-index:5}
+nav button{flex:1;background:none;border:0;padding:10px 0 12px;font-size:13px;color:var(--mute);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav button[aria-current="true"]{color:var(--accent);font-weight:650}
+nav svg{width:24px;height:24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+.card h2{font-size:15px;margin:0 0 10px;font-weight:650}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.btn{appearance:none;border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:12px;padding:12px 14px;font-size:16px;font-weight:600}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.big{flex:1;min-width:140px;padding:16px 12px;font-size:17px}
+.btn.sm{padding:8px 10px;font-size:14px;border-radius:10px}
+.btn:disabled{opacity:.45}
+label.f{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+input[type=text],input[type=number],select,textarea{width:100%;font-size:16px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.hint{font-size:13px;color:var(--mute);line-height:1.4}
+.badge{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:3px 8px;color:#fff}
+.badge.good{background:var(--good)} .badge.warn{background:var(--warn)} .badge.bad{background:var(--bad)} .badge.busy{background:var(--mute)}
+.imgs{list-style:none;margin:0;padding:0}
+.imgs li{display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.imgs li:last-child{border-bottom:0}
+.imgs img{width:64px;height:48px;object-fit:cover;border-radius:8px;background:#000}
+.imgs .meta{flex:1;min-width:0;font-size:14px}
+.imgs .meta b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{background:var(--chip);border-radius:12px;padding:10px}
+.tile .k{font-size:12px;color:var(--mute)} .tile .v{font-size:20px;font-weight:700} .tile .u{font-size:12px;color:var(--mute)}
+.seg{display:inline-flex;background:var(--chip);border-radius:10px;padding:3px}
+.seg button{border:0;background:none;padding:7px 12px;border-radius:8px;font-size:14px;color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.15);font-weight:650}
+svg.chart{width:100%;height:auto;display:block}
+svg.chart text{font-size:11px;fill:var(--mute)}
+table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:6px 4px;text-align:right;border-bottom:1px solid var(--line)} th:first-child,td:first-child{text-align:left}
+.tablewrap{max-height:320px;overflow:auto}
+#viewer{position:fixed;inset:0;background:#000;z-index:20;display:flex;flex-direction:column}
+#viewer[hidden]{display:none}
+#viewer .bar{display:flex;gap:8px;align-items:center;padding:calc(var(--safe-t) + 8px) 10px 8px;color:#fff}
+#viewer .bar b{flex:1;font-size:15px}
+#viewer .stage{flex:1;position:relative;overflow:hidden;touch-action:none}
+#viewer canvas{position:absolute;left:0;top:0}
+#viewer .info{background:#111;color:#ddd;font-size:13px;padding:10px 12px calc(10px + var(--safe-b));line-height:1.5}
+#live{position:fixed;inset:0;background:#000;z-index:20;display:flex;flex-direction:column}
+#live[hidden]{display:none}
+#live .stage{flex:1;position:relative}
+#live video,#live canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+#live .hud{position:absolute;left:10px;right:10px;bottom:calc(16px + var(--safe-b));background:rgba(0,0,0,.65);color:#fff;border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.45}
+#live .top{position:absolute;top:calc(var(--safe-t) + 8px);right:10px}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:30;display:flex;align-items:flex-end;justify-content:center}
+.sheet[hidden]{display:none}
+.sheet .panel{background:var(--card);width:100%;max-width:760px;max-height:88vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(20px + var(--safe-b))}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(92px + var(--safe-b));background:#222;color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;z-index:40;max-width:92vw}
+.toast[hidden]{display:none}
+.check{display:flex;gap:8px;align-items:center;font-size:15px;margin:10px 0}
+.check input{width:20px;height:20px}
+.empty{text-align:center;color:var(--mute);padding:28px 10px}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:#ccc;margin-top:4px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Particle Field</h1>
+  <button id="btnSettings" type="button" aria-label="Settings">Settings</button>
+</header>
+
+<main>
+  <!-- CAPTURE -->
+  <section id="tab-capture">
+    <div class="card">
+      <h2>Sample</h2>
+      <label class="f" for="sampleName">Sample name</label>
+      <input id="sampleName" type="text" placeholder="e.g. Pad 3 – grab 1" autocomplete="off">
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm" id="btnGeo" type="button">Add location</button>
+        <span class="hint" id="geoText"></span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Photograph the tray</h2>
+      <div class="row">
+        <button class="btn primary big" id="btnShoot" type="button">Take photo</button>
+        <button class="btn big" id="btnImport" type="button">Import photos</button>
+      </div>
+      <input type="file" id="fileShoot" accept="image/*" capture="environment" hidden>
+      <input type="file" id="fileImport" accept="image/*" multiple hidden>
+      <button class="btn" id="btnLive" type="button" style="width:100%;margin-top:10px">Align camera (live check)</button>
+      <p class="hint" style="margin-top:12px">Spread particles thinly in window <b>L</b> (phone macro) or <b>S</b> (clip-on lens) so few touch. Light the stand from the back or side port. Lay the phone on the deck with the lens over the window, tap the tray to focus, then shoot. Every photo calibrates itself from the dots, so take as many as you need for a good count — 500+ particles gives stable D10/D50/D90.</p>
+    </div>
+    <div class="card">
+      <h2>Stand setup</h2>
+      <label class="f" for="standH">Stand height</label>
+      <select id="standH">
+        <option value="21">No spacer (21 mm)</option>
+        <option value="31">+10 mm spacer (31 mm)</option>
+        <option value="41">+20 mm spacer (41 mm)</option>
+        <option value="51">+10 +20 mm (51 mm)</option>
+        <option value="61">+20 +20 mm (61 mm)</option>
+        <option value="custom">Custom distance…</option>
+      </select>
+      <div id="customZwrap" hidden><label class="f" for="customZ">Camera-to-tray distance (mm)</label><input id="customZ" type="number" step="any" min="5" value="25"></div>
+      <p class="hint">Used only to correct for particles standing above the tray plane (their outline is closer to the lens). Set it to the setup you used.</p>
+    </div>
+  </section>
+
+  <!-- IMAGES -->
+  <section id="tab-images" hidden>
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><h2 style="margin:0">Photos</h2><span class="hint" id="imgSummary"></span></div>
+      <ul class="imgs" id="imgList"></ul>
+      <div class="empty" id="imgEmpty">No photos yet. Use <b>Capture</b> to add some.</div>
+    </div>
+  </section>
+
+  <!-- RESULTS -->
+  <section id="tab-results" hidden>
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div class="seg" id="basisSeg"><button type="button" data-b="number" aria-pressed="true">By count</button><button type="button" data-b="mass" aria-pressed="false">By volume</button></div>
+        <span class="hint" id="resN"></span>
+      </div>
+      <div class="tiles" style="margin-top:12px" id="tiles"></div>
+      <p class="hint" id="accLine" style="margin:10px 0 0"></p>
+    </div>
+    <div class="card"><h2 id="histTitle">Size distribution</h2><div id="hist"></div></div>
+    <div class="card"><h2>Cumulative % finer</h2><div id="cum"></div></div>
+    <div class="card"><h2>Size classes</h2><div class="tablewrap"><table id="classTable"></table></div></div>
+    <div class="card">
+      <h2>Export</h2>
+      <div class="row">
+        <button class="btn sm" id="expParts" type="button">Particles CSV</button>
+        <button class="btn sm" id="expClasses" type="button">Size classes CSV</button>
+        <button class="btn sm" id="expSave" type="button">Save to history</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>History</h2>
+      <div class="tablewrap"><table id="histTable"></table></div>
+      <div class="row" style="margin-top:8px"><button class="btn sm" id="histCsv" type="button">History CSV</button><button class="btn sm" id="histClear" type="button">Clear history</button></div>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button type="button" data-tab="capture" aria-current="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Capture</button>
+  <button type="button" data-tab="images" aria-current="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 16l5-5 4 4 3-3 6 6"/></svg><span>Photos <b id="navCount"></b></span></button>
+  <button type="button" data-tab="results" aria-current="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Results</button>
+</nav>
+
+<div id="viewer" hidden>
+  <div class="bar"><b id="vTitle"></b><button class="btn sm" id="vMode" type="button">Outlines</button><button class="btn sm" id="vClose" type="button">Close</button></div>
+  <div class="stage" id="vStage"><canvas id="vCanvas"></canvas></div>
+  <div class="info" id="vInfo"></div>
+</div>
+
+<div id="live" hidden>
+  <div class="stage"><video id="lvVideo" playsinline muted></video><canvas id="lvCanvas"></canvas>
+    <div class="top"><button class="btn sm" id="lvClose" type="button">Done</button></div>
+    <div class="hud" id="lvHud">Starting camera…</div></div>
+</div>
+
+<div class="sheet" id="settings" hidden>
+  <div class="panel">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0;font-size:18px">Settings</h2><button class="btn sm" id="setClose" type="button">Done</button></div>
+    <label class="f" for="sPitch">Tray dot pitch (mm) — measure your print</label>
+    <input id="sPitch" type="number" step="0.0001" min="1" max="3" value="2.000">
+    <p class="hint">With calipers, measure from the left edge of a dot to the left edge of the dot 30 places along (nominal 60.00 mm) and enter that value ÷ 30. This one number sets the absolute scale of every result.</p>
+    <label class="f" for="sMeasure">Size measure</label>
+    <select id="sMeasure"><option value="ecd">Equivalent circle diameter (ECD)</option><option value="fmin">Feret min (≈ sieve size)</option><option value="fmax">Feret max</option></select>
+    <div class="row">
+      <div style="flex:1"><label class="f" for="sMin">Smallest size counted (µm)</label><input id="sMin" type="number" step="any" min="0" value="80"></div>
+      <div style="flex:1"><label class="f" for="sMax">Largest (µm, 0 = no limit)</label><input id="sMax" type="number" step="any" min="0" value="0"></div>
+    </div>
+    <label class="f" for="sThr">Edge threshold</label>
+    <select id="sThr"><option value="half">50 % of backlight (opaque particles, recommended)</option><option value="otsu">Automatic (Otsu) – translucent particles</option><option value="manual">Manual</option></select>
+    <div id="sThrManualWrap" hidden><label class="f" for="sThrV">Manual threshold (fraction of backlight)</label><input id="sThrV" type="number" step="0.01" min="0.05" max="0.95" value="0.5"></div>
+    <label class="check"><input type="checkbox" id="sSplit" checked> Split touching particles</label>
+    <label class="check"><input type="checkbox" id="sHeight" checked> Correct for particle height above tray</label>
+    <label class="f" for="sBins">Size classes</label>
+    <select id="sBins"><option value="2">√2 series (half-octave)</option><option value="4">⁴√2 series (quarter-octave)</option><option value="1">2× series (octave)</option><option value="lin">Linear</option></select>
+    <label class="f" for="sShape">Volume model (for "By volume")</label>
+    <select id="sShape"><option value="sphere">Sphere from ECD</option><option value="ellipsoid">Ellipsoid from Ferets</option></select>
+    <label class="f" for="sStillW">Camera photo width for live estimate (px)</label>
+    <input id="sStillW" type="number" step="1" min="640" value="4032">
+    <p class="hint">Changing pitch, threshold, splitting or height correction re-analyses all photos. Size limits, measure and classes update instantly.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

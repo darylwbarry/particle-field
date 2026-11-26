@@ -1,0 +1,26 @@
+import asyncio, json, sys
+from playwright.async_api import async_playwright
+async def main():
+    async with async_playwright() as p:
+        b = await p.chromium.launch(executable_path="/usr/bin/google-chrome", args=["--allow-file-access-from-files"])
+        pg = await b.new_page(viewport={"width":390,"height":844}, device_scale_factor=2)
+        logs=[]; pg.on("console", lambda m: logs.append(m.text)); pg.on("pageerror", lambda e: logs.append("PAGEERR "+str(e)))
+        await pg.goto("http://localhost:8765/index.html")
+        await pg.screenshot(path="test/shot_capture.png")
+        await pg.set_input_files("#fileImport", "test/synthetic_tray.jpg")
+        await pg.wait_for_function("document.querySelector('#imgSummary').textContent.includes('1/1')", timeout=120000)
+        await pg.click("nav button[data-tab=images]"); await pg.wait_for_timeout(300)
+        await pg.screenshot(path="test/shot_images.png")
+        await pg.click("#imgList li"); await pg.wait_for_timeout(800)
+        await pg.screenshot(path="test/shot_viewer.png")
+        await pg.click("#vClose")
+        await pg.click("nav button[data-tab=results]"); await pg.wait_for_timeout(500)
+        await pg.screenshot(path="test/shot_results.png", full_page=True)
+        st = await pg.evaluate("(()=>{const s=window._st; return {n:s.n, d10:s.number.d10, d50:s.number.d50, d90:s.number.d90}})()")
+        sizes = await pg.evaluate("IM[0].res.parts.filter(p=>p.status==='ok').map(p=>p.ecd)")
+        print(json.dumps(st)); print("logs", logs[:10])
+        truth = sorted(x['d'] for x in json.load(open('/tmp/syn.raw.truth.json')))
+        print("truth n", len(truth), " measured n", len(sizes))
+        print("measured sorted", [round(x) for x in sorted(sizes)])
+        await b.close()
+asyncio.run(main())
