@@ -226,16 +226,31 @@ function mkDist(w, h, k1) {
 
 /* ---------------- dot lattice ---------------- */
 function findBlobs(g, w, h) {
+  // Dark, roughly disc-shaped blobs. Printed dots are often fatter than designed and touch their neighbours,
+  // so dots are found as the *cores* of the dark mask (distance transform), which stay separate when rims merge.
   const rB = Math.max(6, Math.round(Math.max(w, h) / 14));
   const bg = background(g, w, h, rB), n = w * h, m = new Uint8Array(n);
   for (let i = 0; i < n; i++) m[i] = g[i] < 0.5 * bg[i] ? 1 : 0;
-  const { lab, n: nl } = labelCC(m, w, h);
-  const A = new Float64Array(nl + 1), SX = new Float64Array(nl + 1), SY = new Float64Array(nl + 1), x0 = new Int32Array(nl + 1).fill(1e9), x1 = new Int32Array(nl + 1).fill(-1), y0 = new Int32Array(nl + 1).fill(1e9), y1 = new Int32Array(nl + 1).fill(-1);
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const L = lab[y * w + x]; if (!L) continue; A[L]++; SX[L] += x; SY[L] += y; if (x < x0[L]) x0[L] = x; if (x > x1[L]) x1[L] = x; if (y < y0[L]) y0[L] = y; if (y > y1[L]) y1[L] = y; }
+  const d = chamfer(m, w, h), cc = labelCC(m, w, h);
+  const A = new Float64Array(cc.n + 1), MD = new Int32Array(cc.n + 1);
+  for (let i = 0; i < n; i++) { const L = cc.lab[i]; if (!L) continue; A[L]++; if (d[i] > MD[L]) MD[L] = d[i]; }
+  // typical dot radius: area-weighted mode of the blobs' inscribed radius (merged dots keep a single dot's radius)
+  const hist = new Map();
+  for (let L = 1; L <= cc.n; L++) { if (A[L] < 6 || MD[L] < 4) continue; const r = MD[L] / 3, k = Math.round(Math.log2(r) * 4);
+    hist.set(k, (hist.get(k) || 0) + Math.min(A[L], 6 * Math.PI * r * r)); }
+  let bk = null, bv = 0; for (const [k] of hist) { const v = (hist.get(k - 1) || 0) + hist.get(k) + (hist.get(k + 1) || 0); if (v > bv) { bv = v; bk = k; } }
+  if (bk === null) return [];
+  const Rm = Math.pow(2, bk / 4), thr = Math.max(3, 0.5 * Rm * 3);
+  const core = new Uint8Array(n); for (let i = 0; i < n; i++) core[i] = d[i] > thr ? 1 : 0;
+  const { lab, n: nl } = labelCC(core, w, h);
+  const CA = new Float64Array(nl + 1), SX = new Float64Array(nl + 1), SY = new Float64Array(nl + 1), CM = new Int32Array(nl + 1), x0 = new Int32Array(nl + 1).fill(1e9), x1 = new Int32Array(nl + 1).fill(-1), y0 = new Int32Array(nl + 1).fill(1e9), y1 = new Int32Array(nl + 1).fill(-1);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x, L = lab[i]; if (!L) continue; CA[L]++; SX[L] += x; SY[L] += y; if (d[i] > CM[L]) CM[L] = d[i]; if (x < x0[L]) x0[L] = x; if (x > x1[L]) x1[L] = x; if (y < y0[L]) y0[L] = y; if (y > y1[L]) y1[L] = y; }
   const out = [];
-  for (let L = 1; L <= nl; L++) { if (A[L] < 10) continue; if (x0[L] === 0 || y0[L] === 0 || x1[L] === w - 1 || y1[L] === h - 1) continue;
-    const bw = x1[L] - x0[L] + 1, bh = y1[L] - y0[L] + 1, fill = A[L] / (Math.PI / 4 * bw * bh), asp = bw / bh;
-    out.push({ x: SX[L] / A[L], y: SY[L] / A[L], a: A[L], fill, asp }); }
+  for (let L = 1; L <= nl; L++) { if (CA[L] < 1) continue;
+    const r = CM[L] / 3, cx = SX[L] / CA[L], cy = SY[L] / CA[L];
+    if (cx - r < 1 || cy - r < 1 || cx + r > w - 2 || cy + r > h - 2) continue;      // cut off by the frame
+    const bw = x1[L] - x0[L] + 1, bh = y1[L] - y0[L] + 1;
+    out.push({ x: cx, y: cy, a: Math.PI * r * r, fill: CA[L] / (Math.PI / 4 * bw * bh), asp: bw / bh }); }
   return out;
 }
 function gridIndex(pts, cell) {
@@ -271,7 +286,7 @@ function latticeFrom(cands, aMode, w, h) {
   const nn = dots.map(p => { const c = GI.near(p.x, p.y, dia * 4).filter(q => q[1] > 0.5).sort((a, b) => a[1] - b[1]); return c.length ? c[0][1] : NaN; }).filter(isFinite);
   const pitch0 = median(nn); if (!isFinite(pitch0)) return { ok: false };
   // dot diameter is half the pitch on this tray; reject size classes that do not fit that geometry
-  if (pitch0 < dia * 1.4 || pitch0 > dia * 3) return { ok: false };
+  if (pitch0 < dia * 1.02 || pitch0 > dia * 3.5) return { ok: false };
   let cs = 0, sn = 0;
   for (const p of dots) for (const [k, d] of GI.near(p.x, p.y, pitch0 * 1.3)) { if (d < pitch0 * 0.7) continue; const t = 4 * Math.atan2(dots[k].y - p.y, dots[k].x - p.x); cs += Math.cos(t); sn += Math.sin(t); }
   const th = Math.atan2(sn, cs) / 4;
@@ -300,25 +315,27 @@ function latticeFrom(cands, aMode, w, h) {
 }
 
 /** Sub-pixel dot centres on the full-resolution image (intensity-weighted, background from an annulus). */
-function refineDots(g, w, h, pts, pitchPx) {
-  const R = 0.36 * pitchPx, Ra0 = 0.38 * pitchPx, Ra1 = 0.46 * pitchPx, Rc = 0.12 * pitchPx, out = [];
-  let tr = 0, per = 0; const core = [];
+function refineDots(g, w, h, pts, pitchPx, dotDiaPx) {
+  // Works for any dot size up to nearly a full pitch: background level is taken from the bright
+  // interstitial corners of each dot's own lattice cell, not from a fixed annulus.
+  const R = Math.min(0.5 * pitchPx, 0.65 * (dotDiaPx || pitchPx) + 2), Rc = 0.12 * pitchPx, st = Math.max(1, Math.floor(pitchPx / 40)), out = [];
+  let tr = 0, per = 0; const core = [], dia = [], buf = [];
   for (const p of pts) {
-    const x0 = Math.max(0, Math.floor(p.x - Ra1)), x1 = Math.min(w - 1, Math.ceil(p.x + Ra1)), y0 = Math.max(0, Math.floor(p.y - Ra1)), y1 = Math.min(h - 1, Math.ceil(p.y + Ra1));
-    if (x0 === 0 || y0 === 0 || x1 === w - 1 || y1 === h - 1) continue;
-    let sb = 0, nb = 0, sc = 0, nc = 0;
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const d = Math.hypot(x - p.x, y - p.y), v = g[y * w + x];
-      if (d >= Ra0 && d <= Ra1) { sb += v; nb++; } else if (d <= Rc) { sc += v; nc++; } }
-    if (!nb || !nc) continue;
-    const bgL = sb / nb, fgL = sc / nc, den = bgL - fgL; if (den <= 0.05 * bgL) continue; core.push(fgL / bgL);
+    const x0 = Math.floor(p.x - R), x1 = Math.ceil(p.x + R), y0 = Math.floor(p.y - R), y1 = Math.ceil(p.y + R);
+    if (x0 <= 0 || y0 <= 0 || x1 >= w - 1 || y1 >= h - 1) continue;
+    buf.length = 0; let sc = 0, nc = 0;
+    for (let y = y0; y <= y1; y += st) for (let x = x0; x <= x1; x += st) buf.push(g[y * w + x]);
+    for (let y = Math.floor(p.y - Rc); y <= p.y + Rc; y++) for (let x = Math.floor(p.x - Rc); x <= p.x + Rc; x++) { sc += g[y * w + x]; nc++; }
+    buf.sort((a, b) => a - b);
+    const bgL = buf[Math.floor(0.92 * (buf.length - 1))], fgL = sc / nc, den = bgL - fgL; if (den <= 0.05 * bgL) continue; core.push(fgL / bgL);
     let sw = 0, sx = 0, sy = 0, ntr = 0;
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { if (Math.hypot(x - p.x, y - p.y) > R) continue;
-      let c = (bgL - g[y * w + x]) / den; if (c < 0) c = 0; else if (c > 1) c = 1; sw += c; sx += c * x; sy += c * y; if (c > 0.1 && c < 0.9) ntr++; }
+      let c = (bgL - g[y * w + x]) / den; if (c < 0.12) continue; if (c > 1) c = 1; sw += c; sx += c * x; sy += c * y; if (c > 0.1 && c < 0.9) ntr++; }
     if (sw <= 0) continue;
     out.push({ i: p.i, j: p.j, x: sx / sw, y: sy / sw });
-    tr += ntr; per += 2 * Math.sqrt(Math.PI * sw);
+    tr += ntr; per += 2 * Math.sqrt(Math.PI * sw); dia.push(2 * Math.sqrt(sw / Math.PI));
   }
-  return { pts: out, edgeWidthPx: per ? tr / per : NaN, coreRatio: median(core) };
+  return { pts: out, edgeWidthPx: per ? tr / per : NaN, coreRatio: median(core), dotDiaPx: median(dia) };
 }
 
 function fitWithDistortion(pts, w, h, pitch) {
@@ -359,7 +376,7 @@ function calibrate(g, w, h, opts = {}) {
     fit = fitWithDistortion(pts, w, h, pitch);
   }
   // sub-pixel centres on the full image, then final fit with outlier rejection
-  const R = refineDots(g, w, h, pts, pitchPx); pts = R.pts;
+  const R = refineDots(g, w, h, pts, pitchPx, L.dotDiaPx * f); pts = R.pts;
   fit = fitWithDistortion(pts, w, h, pitch);
   for (let it = 0; it < 2; it++) { const res = planeResiduals(pts, fit, pitch), med = median(res); const keep = pts.filter((_, k) => res[k] < Math.max(4 * med, 0.02 * pitch)); if (keep.length === pts.length) break; pts = keep; fit = fitWithDistortion(pts, w, h, pitch); }
   const res = planeResiduals(pts, fit, pitch), rms = Math.sqrt(res.reduce((a, b) => a + b * b, 0) / res.length);
@@ -383,11 +400,12 @@ function calibrate(g, w, h, opts = {}) {
     }
   }
   if (!best) return { ok: false, why: 'Dots found, but no sample window (L or S) is in view. Centre the camera over a window.' };
-  const r = lay.dot_d_mm / 2, mg = lay.roi_margin_mm;
+  const dotDiaMm = isFinite(R.dotDiaPx) ? R.dotDiaPx * pitch / pitchPx : lay.dot_d_mm;
+  const r = Math.max(lay.dot_d_mm / 2, Math.min(dotDiaMm / 2, 0.48 * pitch)), mg = lay.roi_margin_mm;
   const roi = [(best.a - 1) * pitch + r + mg, (best.a + best.di) * pitch - r - mg, (best.b - 1) * pitch + r + mg, (best.b + best.dj) * pitch - r - mg];
   const Hi = inv3(fit.H);
   const cal = { ok: true, w, h, H: fit.H, Hi, k1: fit.D.k1, pitch, nDots: pts.length, rmsUm: rms * 1000, window: best.win.name, roi,
-    edgeWidthPx: R.edgeWidthPx, dotCoreRatio: R.coreRatio, dots: pts.map(p => [p.x, p.y]) };
+    edgeWidthPx: R.edgeWidthPx, dotCoreRatio: R.coreRatio, dotDiaMm, dots: pts.map(p => [p.x, p.y]) };
   const ctr = toImage(cal, (roi[0] + roi[1]) / 2, (roi[2] + roi[3]) / 2);
   cal.umPerPx = Math.sqrt(jacDet(cal, ctr[0], ctr[1])) * 1000;
   // fraction of ROI inside the frame
