@@ -225,12 +225,11 @@ function mkDist(w, h, k1) {
 }
 
 /* ---------------- dot lattice ---------------- */
-function findBlobs(g, w, h) {
+function findBlobs(g, w, h, bg, frac) {
   // Dark, roughly disc-shaped blobs. Printed dots are often fatter than designed and touch their neighbours,
   // so dots are found as the *cores* of the dark mask (distance transform), which stay separate when rims merge.
-  const rB = Math.max(6, Math.round(Math.max(w, h) / 14));
-  const bg = background(g, w, h, rB), n = w * h, m = new Uint8Array(n);
-  for (let i = 0; i < n; i++) m[i] = g[i] < 0.5 * bg[i] ? 1 : 0;
+  const n = w * h, m = new Uint8Array(n);
+  for (let i = 0; i < n; i++) m[i] = g[i] < frac * bg[i] ? 1 : 0;
   const d = chamfer(m, w, h), cc = labelCC(m, w, h);
   const A = new Float64Array(cc.n + 1), MD = new Int32Array(cc.n + 1);
   for (let i = 0; i < n; i++) { const L = cc.lab[i]; if (!L) continue; A[L]++; if (d[i] > MD[L]) MD[L] = d[i]; }
@@ -264,9 +263,19 @@ function median(a) { if (!a.length) return NaN; const s = Float64Array.from(a).s
 
 /** Detect and index the lattice on a (downsampled) linear grey image. Returns indexed dots in that image's pixels. */
 function indexLattice(g, w, h) {
-  const blobs = findBlobs(g, w, h);
+  // Try several darkness thresholds: 50 % suits crisp dots; lower ones isolate the black cores when
+  // the print has grey halos around the dots (black showing through thin white) or the dots touch.
+  const bg = background(g, w, h, Math.max(6, Math.round(Math.max(w, h) / 14)));
+  let best = null;
+  for (const frac of [0.5, 0.32, 0.2, 0.12]) {
+    const r = latticeAt(findBlobs(g, w, h, bg, frac), w, h);
+    if (r.ok && (!best || r.pts.length > best.pts.length * 1.15)) best = r;
+  }
+  return best || { ok: false, why: 'No calibration dot grid found. Is the tray in the picture, in focus and evenly lit?' };
+}
+function latticeAt(blobs, w, h) {
   const cands = blobs.filter(b => b.fill > 0.55 && b.fill < 1.2 && b.asp > 0.5 && b.asp < 2);
-  if (cands.length < 12) return { ok: false, why: 'No calibration dots found. Is the tray in the picture and lit from below?' };
+  if (cands.length < 12) return { ok: false };
   // the dots are the size class that forms a lattice; try the most common size classes, keep the best grid
   const hist = new Map(); for (const b of cands) { const k = Math.round(Math.log2(b.a) * 8); hist.set(k, (hist.get(k) || 0) + 1); }
   const peaks = [...hist.keys()].map(k => [k, (hist.get(k - 1) || 0) + hist.get(k) + (hist.get(k + 1) || 0)]).sort((a, b) => b[1] - a[1]);

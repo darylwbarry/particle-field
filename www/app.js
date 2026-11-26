@@ -1,7 +1,7 @@
 /* Particle Field — mobile UI. Measurement lives in core.js (runs in worker.js). */
 'use strict';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
-const VERSION = '1.1.1';              // keep in step with the cache name in sw.js
+const VERSION = '1.1.2';              // keep in step with the cache name in sw.js
 const MAXPIX = 16.0e6;               // iOS canvas limit is 16.7 MP; 48 MP photos are downscaled 2x (≈ their real resolution)
 const OVC = { ok: '#35e0c2', fine: '#ffb020', coarse: '#be96ff', edge: '#80929a' };
 
