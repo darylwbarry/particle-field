@@ -1,6 +1,7 @@
 /* Particle Field — mobile UI. Measurement lives in core.js (runs in worker.js). */
 'use strict';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const VERSION = '1.1.0';              // keep in step with the cache name in sw.js
 const MAXPIX = 16.0e6;               // iOS canvas limit is 16.7 MP; 48 MP photos are downscaled 2x (≈ their real resolution)
 const OVC = { ok: '#35e0c2', fine: '#ffb020', coarse: '#be96ff', edge: '#80929a' };
 
@@ -295,6 +296,15 @@ function init() {
   $('#btnGeo').onclick = () => { if (!navigator.geolocation) { toast('Location is not available.'); return; } $('#geoText').textContent = 'Locating…';
     navigator.geolocation.getCurrentPosition(p => { geo = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy }; $('#geoText').textContent = `${geo.lat.toFixed(5)}, ${geo.lon.toFixed(5)} (±${Math.round(geo.acc)} m)`; },
       e => { $('#geoText').textContent = ''; toast('Location unavailable: ' + e.message); }, { enableHighAccuracy: true, timeout: 15000 }); };
+  $('#verLine').textContent = 'Version ' + VERSION;
+  $('#btnUpdate').onclick = async () => {
+    toast('Checking for update…');
+    try {
+      if ('serviceWorker' in navigator) { const regs = await navigator.serviceWorker.getRegistrations(); await Promise.all(regs.map(r => r.unregister())); }
+      if (window.caches) { const keys = await caches.keys(); await Promise.all(keys.map(k => caches.delete(k))); }
+    } catch (e) {}
+    location.reload();
+  };
   bindSettings(); renderAll();
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
 }
