@@ -6,6 +6,8 @@ the scale, corrects tilt and lens distortion, and checks focus, so the phone can
 
 ![exploded view](render_exploded.png)
 
+**Just want to use it?** Go to [4. Step-by-step use](#4-step-by-step-use).
+
 ```
 particle-field/
   www/            the app (HTML/JS). Runs as a web app or inside the native wrappers
@@ -124,20 +126,89 @@ Typical starting points: clip-on lens **no spacer**; iPhone Pro macro **no space
    For coarse material (mostly > 1 mm), shoot window **L** without the clip lens using the main camera.
    At that scale it's fine for > 1 mm particles.
 
-## 4. Field procedure
-1. Pull the drawer out. Sprinkle a small sub-sample thinly over window **L** (or **S**). Tap the tray gently to break up clumps. Aim for particles that mostly don't touch, covering about 10–20 % of the window.
-2. Slide the drawer back in.
-3. Light from below. **Outdoors**, point the back or side light ports at open sky or the sun. **Indoors**, shine a phone torch or desk lamp into a port. The tunnel blocks light from above, so particles appear as dark silhouettes.
-4. In the app: **Take photo** (the native camera opens; tap the window to focus) or **Import photos**.
-5. Check the badge on each photo. **Good** means ≥ 20 px per 200 µm, sharp, and a clean grid fit. Tap a photo to see outlines.
-6. Repeat with fresh sub-samples until **Results** shows ≥ 500 particles. D10/D50/D90 stabilise around there.
-7. **Export** a particle or class CSV (shares to Files, email, etc.), or **Save to history** on the phone.
+## 4. Step-by-step use
 
-Settings worth knowing:
+Nine diagrams: one setup step you do once, then eight steps per sample. The app screens show example values.
+
+### Once: measure your tray's dot pitch
+![Measure the dot pitch with calipers](docs/img/step0_pitch.svg)
+
+With calipers, measure from the left edge of one dot to the left edge of the dot 30 places along (nominal 60.00 mm).
+Divide by 30 and enter it in **Settings → Tray dot pitch**. Every size the app reports is scaled by this number.
+
+### Step 1. Assemble the stand
+![Exploded front view of the stand](docs/img/step1_assemble.svg)
+
+Base body on a flat surface, lid onto its four pegs, then the deck. Add spacers only if the camera can't focus
+without them (step 6 tells you). Start with **no spacer** for a clip-on lens or iPhone Pro macro mode.
+In the app's **Capture** tab, set **Stand height** to match what you stacked.
+
+### Step 2. Pull the drawer out and spread the sample
+![Top view of the tray with windows L and S](docs/img/step2_load.svg)
+
+Sprinkle a small sub-sample thinly over one window and tap the tray to break up clumps.
+Use window **L** with phone macro mode, or for coarse material. Use window **S** with a clip-on macro lens.
+Aim for particles that mostly don't touch, covering about 10–20 % of the window.
+
+### Step 3. Slide the drawer back in
+![Cut-away side view, drawer sliding in](docs/img/step3_slide_in.svg)
+
+Push until the face plate meets the base. Go gently so the particles don't shift into a pile.
+
+### Step 4. Light it from below
+![Cut-away side view showing the light path](docs/img/step4_light.svg)
+
+**Outdoors**, turn the stand so the back or left-side port faces open sky or the sun.
+**Indoors**, shine a phone torch or desk lamp into a port. Light bounces around the white chamber and comes up
+through the tray, so particles appear as dark silhouettes on a bright background.
+
+### Step 5. Lay the phone on the deck
+![Top view of the deck with the phone in place](docs/img/step5_place_phone.svg)
+
+Screen up, with the lens you are using over the point where the **L** (or **S**) groove crosses the centre groove.
+With a clip-on lens, keep the Camera at **1×**. It doesn't have to be exact; the app finds the window itself.
+
+### Step 6. Check alignment, resolution and focus
+![The app's Align camera screen and what its messages mean](docs/img/step6_align.svg)
+
+In the app, tap **Align camera (live check)**. The yellow box is the area that will be measured.
+
+| The panel says | What to do |
+|---|---|
+| **resolution OK** and **sharp** | Go to step 7 |
+| **marginal** | Usable. Fewer spacers, or window S with a clip-on lens, is better |
+| **too coarse** | Move closer, or use window S with a clip-on macro lens |
+| **soft – tap to focus** | Tap the tray on screen. If it never sharpens, the lens is too close: add a spacer |
+| **Looking for the dot grid…** | Slide the phone until a window is in view, and check the light |
+
+Tap **Done** when it looks right.
+
+### Step 7. Take the photo and check its badge
+![The Photos list with Good, Check and No result badges](docs/img/step7_shoot_check.svg)
+
+Tap **Take photo**, tap the window to focus, hold still and shoot. The photo is analysed on the phone in a few seconds.
+In **Photos**, each one gets a badge:
+
+- **Good**: at least 20 px across 200 µm, sharp, and a clean grid fit. Keep it.
+- **Check**: soft or a little coarse. Tap it to see why, and retake if you can.
+- **Too coarse** or **No result**: not usable. Remove it and go back to step 6.
+
+Tap any photo to see the outlines of what was measured.
+
+### Step 8. Repeat, then read and export
+![The Results screen with D10, D50, D90 and export buttons](docs/img/step8_results.svg)
+
+Repeat steps 2–7 with fresh sub-samples until **Results** shows at least 500 particles. D10, D50 and D90 settle around there.
+Then export a **Particles CSV** or **Size classes CSV** (opens the share sheet), or **Save to history** on the phone.
+Brush the tray clean before the next sample.
+
+### Settings worth knowing
 - **Size measure**: ECD (default) or Feret min, which is closest to sieve size.
 - **By volume** weights by particle volume (≈ mass for one material). It matches sieve and laser results better than **By count**.
 - **Edge threshold**: keep *50 %* for opaque particles. Use *Automatic* for translucent ones (glass, salt).
 - **Height correction**: on by default (assumes roughly equant particles). Turn it off for flakes and plates.
+
+To change a diagram, edit `docs/make_diagrams.py` and run `python3 docs/make_diagrams.py`.
 
 ---
 
