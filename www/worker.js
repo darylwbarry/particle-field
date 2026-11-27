@@ -4,7 +4,7 @@ self.onmessage = (e) => {
   const m = e.data;
   try {
     const g = PF.grayLinear(new Uint8ClampedArray(m.rgba), m.w, m.h);
-    const cal = PF.calibrate(g, m.w, m.h, { pitch_mm: m.opts.pitch });
+    const cal = PF.calibrate(g, m.w, m.h, { pitch_mm: m.opts.pitch, polarity: m.opts.polarity });
     if (m.kind === 'live') {
       if (!cal.ok) { self.postMessage({ id: m.id, kind: 'live', ok: false, why: cal.why }); return; }
       const a = PF.toPlane(cal, 0, m.h / 2), b = PF.toPlane(cal, m.w, m.h / 2);

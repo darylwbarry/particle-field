@@ -49,7 +49,7 @@ for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
   else cov = inside ? 1 : 0;
   const rr = ((x - W / 2) ** 2 + (y - H / 2) ** 2) / (W * W / 4 + H * H / 4);
   const illum = 0.75 * (1 - 0.35 * rr) * (1 + 0.04 * Math.sin(x / 300) * Math.cos(y / 250));
-  img[y * W + x] = illum * (1 - cov) + 0.01 * illum * cov;
+  img[y * W + x] = process.env.INV ? 0.03 * illum * (1 - cov) + 0.8 * illum * cov : illum * (1 - cov) + 0.01 * illum * cov;
 }
 // optics blur, phone sharpening, noise
 const gblur = (src, sigma) => { const r = Math.ceil(3 * sigma), k = []; let ks = 0; for (let i = -r; i <= r; i++) { const v = Math.exp(-i * i / (2 * sigma * sigma)); k.push(v); ks += v; }
@@ -77,7 +77,7 @@ const rows = [];
 for (let k = 0; k < parts.length; k++) { const t = truthImg[k]; let best = null, bd = Infinity; for (const m of res.parts) { const d = Math.hypot(m.cx - t[0], m.cy - t[1]); if (d < bd) { bd = d; best = m; } }
   if (best && bd < 5) rows.push({ d: parts[k].d, ecd: best.ecd, fmin: best.fmin, fmax: best.fmax, edge: best.edge }); }
 const by = {}; for (const r of rows) (by[r.d] = by[r.d] || []).push((r.ecd / r.d - 1) * 100);
-console.log(`um/px true ${UM}  measured ${cal.umPerPx.toFixed(3)}  window ${cal.window}  dots ${cal.nDots}  rms ${cal.rmsUm.toFixed(2)} um  k1 ${cal.k1.toFixed(4)}  edgeW ${cal.edgeWidthPx.toFixed(2)} px  blurSigma est ${Q.blurSigmaPx.toFixed(2)} (true ${Math.hypot(SIG, 0).toFixed(2)})`);
+console.log(`polarity ${cal.polarity} um/px true ${UM}  measured ${cal.umPerPx.toFixed(3)}  window ${cal.window}  dots ${cal.nDots}  rms ${cal.rmsUm.toFixed(2)} um  k1 ${cal.k1.toFixed(4)}  edgeW ${cal.edgeWidthPx.toFixed(2)} px  blurSigma est ${Q.blurSigmaPx.toFixed(2)} (true ${Math.hypot(SIG, 0).toFixed(2)})`);
 console.log(`matched ${rows.length}/${parts.length} (detected ${res.parts.length})  render ${(tR - t0) / 1000}s  pipeline ${(tP - tR) / 1000}s  thr ${res.thr.toFixed(3)} norm ${res.bgNorm.toFixed(3)}  quality ${Q.level}: ${Q.msg}  est200 ±${Q.est200pct.toFixed(2)}%`);
 for (const d of Object.keys(by).map(Number).sort((a, b) => a - b)) { const e = by[d], mean = e.reduce((a, b) => a + b, 0) / e.length, sd = Math.sqrt(e.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, e.length - 1)), mx = Math.max(...e.map(Math.abs));
   console.log(`  D=${String(d).padStart(4)} um  n=${String(e.length).padStart(2)}  mean err ${mean.toFixed(2).padStart(6)}%  sd ${sd.toFixed(2)}%  max|err| ${mx.toFixed(2)}%`); }

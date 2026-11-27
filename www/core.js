@@ -363,10 +363,21 @@ function planeResiduals(pts, fit, pitch) {
 }
 
 /** Full calibration from a full-res linear grey image. */
+function invertAbout(g, ref) { const o = new Float32Array(g.length); for (let i = 0; i < g.length; i++) { const v = ref - g[i]; o[i] = v > 0 ? v : 0; } return o; }
 function calibrate(g, w, h, opts = {}) {
   const lay = opts.layout || LAYOUT, pitch = opts.pitch_mm || lay.pitch_mm;
   const f = Math.max(1, Math.floor(Math.max(w, h) / 1400)), d = downsample(g, w, h, f);
-  const L = indexLattice(d.g, d.w, d.h); if (!L.ok) return L;
+  // Lighting: 'dark' = dark dots and particles on a bright (backlit) tray; 'bright' = white dots and bright
+  // particles on a black tray lit from the side. Bright scenes are inverted about a white reference so the
+  // rest of the pipeline is identical.
+  const smp = []; for (let i = 0; i < d.g.length; i += 7) smp.push(d.g[i]); smp.sort((a, b) => a - b);
+  const med = smp[smp.length >> 1], whiteRef = smp[Math.floor(0.98 * (smp.length - 1))] || 1;
+  const want = opts.polarity || 'auto';
+  const order = want === 'dark' ? ['dark'] : want === 'bright' ? ['bright'] : med < 0.4 * whiteRef ? ['bright', 'dark'] : ['dark', 'bright'];
+  let L = null, polarity = order[0];
+  for (const pol of order) { const r = indexLattice(pol === 'bright' ? invertAbout(d.g, whiteRef) : d.g, d.w, d.h); if (r.ok && (!L || !L.ok)) { L = r; polarity = pol; } else if (!L) L = r; if (L.ok) break; }
+  if (!L.ok) return L;
+  if (polarity === 'bright') g = invertAbout(g, whiteRef);
   let pts = L.pts.map(p => ({ i: p.i, j: p.j, x: (p.x + 0.5) * f - 0.5, y: (p.y + 0.5) * f - 0.5 }));
   const pitchPx = L.pitchPx * f;
   // coarse fit, outlier rejection, fill-in of missed sites
@@ -414,7 +425,7 @@ function calibrate(g, w, h, opts = {}) {
   const roi = [(best.a - 1) * pitch + r + mg, (best.a + best.di) * pitch - r - mg, (best.b - 1) * pitch + r + mg, (best.b + best.dj) * pitch - r - mg];
   const Hi = inv3(fit.H);
   const cal = { ok: true, w, h, H: fit.H, Hi, k1: fit.D.k1, pitch, nDots: pts.length, rmsUm: rms * 1000, window: best.win.name, roi,
-    edgeWidthPx: R.edgeWidthPx, dotCoreRatio: R.coreRatio, dotDiaMm, dots: pts.map(p => [p.x, p.y]) };
+    edgeWidthPx: R.edgeWidthPx, dotCoreRatio: R.coreRatio, dotDiaMm, polarity, whiteRef, dots: pts.map(p => [p.x, p.y]) };
   const ctr = toImage(cal, (roi[0] + roi[1]) / 2, (roi[2] + roi[3]) / 2);
   cal.umPerPx = Math.sqrt(jacDet(cal, ctr[0], ctr[1])) * 1000;
   // fraction of ROI inside the frame
@@ -442,7 +453,9 @@ function polyMask(poly, x0, y0, w, h, f) { // mask over a crop whose pixel (X,Y)
  * opts: thrMode 'half'|'otsu'|'manual', thr (0..1), open (px), split (bool), splitDepthUm, band (px), maxSizeUm, heightZmm (0 = off), maxPix
  */
 function measureParticles(g, w, h, cal, opts = {}) {
-  const o = Object.assign({ thrMode: 'half', thr: 0.5, open: 1, split: true, splitDepthUm: 20, band: 3, maxSizeUm: 2500, heightZmm: 0, maxPix: 6e6 }, opts);
+  const o = Object.assign({ thrMode: 'half', thr: 0.5, open: 1, split: true, splitDepthUm: 20, band: 3, maxSizeUm: 2500, heightZmm: 0, maxPix: 6e6, brightThr: 0.15 }, opts);
+  const bright = cal.polarity === 'bright';
+  if (bright) g = invertAbout(g, cal.whiteRef);
   const poly = roiPolygon(cal);
   let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity; for (const p of poly) { bx0 = Math.min(bx0, p[0]); by0 = Math.min(by0, p[1]); bx1 = Math.max(bx1, p[0]); by1 = Math.max(by1, p[1]); }
   const pad = Math.ceil(0.25 * cal.pitch * 1000 / cal.umPerPx);
@@ -461,7 +474,8 @@ function measureParticles(g, w, h, cal, opts = {}) {
   let mk = 100, mv = 0; for (let k = 120; k < NB; k++) if (hst[k] > mv) { mv = hst[k]; mk = k; }   // background mode (ratio > 0.6)
   const norm = mk / 200; for (let i = 0; i < n; i++) r[i] /= norm;
   let T = o.thr;
-  if (o.thrMode === 'half') T = 0.5;
+  if (bright) T = 1 - Math.min(0.9, Math.max(0.02, o.brightThr));   // a particle is anything brighter than brightThr x dot white
+  else if (o.thrMode === 'half') T = 0.5;
   else if (o.thrMode === 'otsu') { const H2 = new Uint32Array(256); let c = 0; for (let i = 0; i < n; i++) if (inR[i]) { let k = Math.round(r[i] * 200); if (k < 0) k = 0; if (k > 255) k = 255; H2[k]++; c++; } T = otsu(H2, c) / 200; }
   let m = new Uint8Array(n); for (let i = 0; i < n; i++) m[i] = r[i] < T ? 1 : 0;
   const op = Math.round(o.open / f); if (op > 0) m = morph(morph(m, cw, ch, op, true), cw, ch, op, false);
@@ -476,10 +490,11 @@ function measureParticles(g, w, h, cal, opts = {}) {
     let k = Math.floor(r[i] * NH); if (k < 0) k = 0; if (k >= NH) k = NH - 1; rh[L * NH + k]++; }
   // core (fully dark) level: per particle only where the particle is big enough for blur not to lift its core;
   // otherwise the median core level of the big ones, else the black calibration dots
-  const sigEst = isFinite(cal.edgeWidthPx) ? cal.edgeWidthPx / 2.56 / f : 1;
+  const sigEst = isFinite(cal.edgeWidthPx) ? Math.min(2.5, cal.edgeWidthPx / 2.56) / f : 1;
   const d = Math.max(Math.round(o.band), Math.ceil(2.5 * sigEst));
   const bigA = Math.PI * Math.pow(3 * sigEst + 3, 2), rfg = new Float32Array(nl + 1), bigCores = [];
-  for (let L = 1; L <= nl; L++) { const tgt = 0.1 * A[L]; let c = 0, k = 0; for (; k < NH; k++) { c += rh[L * NH + k]; if (c >= tgt) break; } rfg[L] = (k + 0.5) / NH; if (A[L] >= bigA) bigCores.push(rfg[L]); }
+  // (side-lit particles vary in brightness, so their reference level is the particle's median, not its extreme)
+  for (let L = 1; L <= nl; L++) { const tgt = (bright ? 0.5 : 0.1) * A[L]; let c = 0, k = 0; for (; k < NH; k++) { c += rh[L * NH + k]; if (c >= tgt) break; } rfg[L] = (k + 0.5) / NH; if (A[L] >= bigA) bigCores.push(rfg[L]); }
   const coreG = bigCores.length >= 3 ? median(bigCores) : (isFinite(cal.dotCoreRatio) ? Math.max(0, cal.dotCoreRatio) : 0.05);
   for (let L = 1; L <= nl; L++) if (A[L] < bigA) rfg[L] = coreG;
   // edge band: distance (chessboard) to the other phase, up to d
@@ -497,7 +512,7 @@ function measureParticles(g, w, h, cal, opts = {}) {
     const opaque = rfg[L] < 0.6;
     if (lab[i]) { if (distIn[i] > d || !opaque) { sub[L] += 1; continue; } }
     else if (!opaque) continue;
-    let c = (1 - r[i]) / (1 - rfg[L]); if (c < -1) c = -1; else if (c > 2) c = 2; sub[L] += c; }
+    let c = (1 - r[i]) / (1 - rfg[L]); if (bright) { if (c < 0) c = 0; else if (c > 1) c = 1; } else if (c < -1) c = -1; else if (c > 2) c = 2; sub[L] += c; }
   // geometry: boundary pixels -> hull -> plane
   const isB = (i, L, x, y) => x === 0 || y === 0 || x === cw - 1 || y === ch - 1 || lab[i - 1] !== L || lab[i + 1] !== L || lab[i - cw] !== L || lab[i + cw] !== L;
   const bpts = new Array(nl + 1); for (let L = 1; L <= nl; L++) bpts[L] = [];
@@ -523,8 +538,11 @@ function measureParticles(g, w, h, cal, opts = {}) {
 
 /** Quality verdict for 200 µm particles. */
 function quality(cal) {
-  const px200 = 200 / cal.umPerPx, sig = cal.edgeWidthPx / 2.56;
-  // expected 1-sigma relative ECD error for one 200 µm particle (empirical model from synthetic tests) + scale terms
+  const px200 = 200 / cal.umPerPx;
+  // Dot edges only tell us about focus when the dots print crisp. On a backlit white tray each dot has a soft
+  // shadow (light scattering in the plastic), which looks like blur but is not.
+  const dotsCrisp = !(cal.dotDiaMm > 1.3 * LAYOUT.dot_d_mm);
+  const sig = dotsCrisp ? cal.edgeWidthPx / 2.56 : NaN;
   const edgeTerm = 0.25 / px200 * 100, blurTerm = isFinite(sig) ? Math.max(0, sig - 2) * 0.6 / px200 * 100 : 0;
   const scaleTerm = Math.hypot(cal.rmsUm / (cal.pitch * 1000) / Math.sqrt(Math.max(1, cal.nDots)) * 100 * 3, 0.1);
   const est = Math.hypot(edgeTerm, blurTerm, scaleTerm);
@@ -532,9 +550,10 @@ function quality(cal) {
   if (px200 < 12) { level = 'bad'; msg = `Too coarse: 200 µm spans only ${px200.toFixed(1)} px. Use a closer setting or a clip-on macro lens.`; }
   else if (px200 < 20) { level = 'warn'; msg = `200 µm spans ${px200.toFixed(1)} px; aim for 20 px or more.`; }
   if (isFinite(sig) && sig > 3) { level = level === 'bad' ? 'bad' : 'warn'; msg += (msg ? ' ' : '') + `Image looks soft (edge blur ≈ ${sig.toFixed(1)} px). Tap to focus on the tray and retake.`; }
-  if (cal.rmsUm > 15) { level = level === 'bad' ? 'bad' : 'warn'; msg += (msg ? ' ' : '') + `Calibration residual is high (${cal.rmsUm.toFixed(0)} µm).`; }
+  if (cal.rmsUm > 100) { level = level === 'bad' ? 'bad' : 'warn'; msg += (msg ? ' ' : '') + `Calibration residual is high (${cal.rmsUm.toFixed(0)} µm).`; }
   if (!msg) msg = `Resolution is good: 200 µm spans ${px200.toFixed(0)} px.`;
-  return { level, msg, px200, blurSigmaPx: sig, est200pct: est };
+  if (!dotsCrisp) msg += ' Sharpness is not checked on this tray (soft dot shadows); judge focus by eye.';
+  return { level, msg, px200, blurSigmaPx: sig, est200pct: est, polarity: cal.polarity || 'dark' };
 }
 
 /* ---------------- statistics (shared with the desktop app) ---------------- */

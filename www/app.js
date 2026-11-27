@@ -1,17 +1,17 @@
 /* Particle Field — mobile UI. Measurement lives in core.js (runs in worker.js). */
 'use strict';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
-const VERSION = '1.1.2';              // keep in step with the cache name in sw.js
+const VERSION = '1.2.0';              // keep in step with the cache name in sw.js
 const MAXPIX = 16.0e6;               // iOS canvas limit is 16.7 MP; 48 MP photos are downscaled 2x (≈ their real resolution)
 const OVC = { ok: '#35e0c2', fine: '#ffb020', coarse: '#be96ff', edge: '#80929a' };
 
 /* ---------------- settings ---------------- */
-const DEF = { pitch: 2.0, measure: 'ecd', min: 80, max: 0, thrMode: 'half', thr: 0.5, split: true, height: true, bins: '2', shape: 'sphere', stillW: 4032, standH: '21', customZ: 25, basis: 'number' };
+const DEF = { pitch: 2.0, measure: 'ecd', min: 80, max: 0, thrMode: 'half', thr: 0.5, split: true, height: true, bins: '2', shape: 'sphere', stillW: 4032, standH: '21', customZ: 25, basis: 'number', polarity: 'auto', bright: 15 };
 let S = Object.assign({}, DEF);
 try { Object.assign(S, JSON.parse(localStorage.getItem('pf.settings') || '{}')); } catch (e) {}
 const saveS = () => { try { localStorage.setItem('pf.settings', JSON.stringify(S)); } catch (e) {} };
 const Zmm = () => S.standH === 'custom' ? +S.customZ : +S.standH;
-const analysisKey = () => JSON.stringify([S.pitch, S.thrMode, S.thr, S.split, S.height, Zmm()]);
+const analysisKey = () => JSON.stringify([S.pitch, S.thrMode, S.thr, S.split, S.height, Zmm(), S.polarity, S.bright]);
 
 /* ---------------- state ---------------- */
 const IM = [];            // { id, name, file, thumb, state:'queued'|'busy'|'done'|'fail', why, cal, res, q, prev, key }
@@ -57,7 +57,7 @@ async function pump() {
     const d = await decode(r.file);
     if (!r.thumb) r.thumb = thumbOf(d.canvas);
     const img = d.canvas.getContext('2d').getImageData(0, 0, d.w, d.h);
-    const opts = { pitch: +S.pitch, thrMode: S.thrMode, thr: +S.thr, split: S.split, heightZmm: S.height ? Zmm() : 0, maxSizeUm: S.max > 0 ? Math.max(+S.max, 500) : 2500 };
+    const opts = { pitch: +S.pitch, polarity: S.polarity, brightThr: (+S.bright || 15) / 100, thrMode: S.thrMode, thr: +S.thr, split: S.split, heightZmm: S.height ? Zmm() : 0, maxSizeUm: S.max > 0 ? Math.max(+S.max, 500) : 2500 };
     const key = analysisKey();
     const out = await runWorker({ id: ++uid, rgba: img.data.buffer, w: d.w, h: d.h, opts }, [img.data.buffer]);
     if (!IM.includes(r)) { busy = false; pump(); return; }
@@ -164,7 +164,7 @@ function openViewer(i) {
   V.r = r; $('#viewer').hidden = false; $('#vTitle').textContent = r.name;
   const c = r.cal, q = r.q, n = r.res.parts.filter(p => p.status === 'ok').length, ne = r.res.parts.filter(p => p.status === 'edge').length;
   $('#vInfo').innerHTML = `<b style="color:${q.level === 'good' ? '#4fd1a5' : q.level === 'warn' ? '#ffc04d' : '#ff6b77'}">${esc(q.msg)}</b><br>
-   Window ${c.window} · ${c.umPerPx.toFixed(3)} µm/px · ${c.nDots} dots · fit residual ${c.rmsUm.toFixed(1)} µm · edge blur ≈ ${isFinite(q.blurSigmaPx) ? q.blurSigmaPx.toFixed(1) : '–'} px · est. ±${q.est200pct.toFixed(1)} % at 200 µm<br>
+   ${c.polarity === 'bright' ? 'Side-lit (bright on black)' : 'Backlit (dark on white)'} · Window ${c.window} · ${c.umPerPx.toFixed(3)} µm/px · ${c.nDots} dots · fit residual ${c.rmsUm.toFixed(1)} µm · edge blur ≈ ${isFinite(q.blurSigmaPx) ? q.blurSigmaPx.toFixed(1) : '–'} px · est. ±${q.est200pct.toFixed(1)} % at 200 µm<br>
    ${n} counted · ${ne} cut by the window edge${r.scaled ? ' · photo downscaled to 16 MP' : ''}
    <div class="legend"><span><i style="background:${OVC.ok}"></i>Counted</span><span><i style="background:${OVC.fine}"></i>Below min</span><span><i style="background:${OVC.coarse}"></i>Above max</span><span><i style="background:${OVC.edge}"></i>Cut by edge</span></div>`;
   requestAnimationFrame(() => { fitViewer(); drawViewer(); });
@@ -216,7 +216,7 @@ async function liveTick() {
   const s = Math.min(1, 1100 / Math.max(v.videoWidth, v.videoHeight)), w = Math.round(v.videoWidth * s), h = Math.round(v.videoHeight * s);
   const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(v, 0, 0, w, h);
   const img = x.getImageData(0, 0, w, h);
-  const out = await runWorker({ id: ++uid, kind: 'live', rgba: img.data.buffer, w, h, opts: { pitch: +S.pitch } }, [img.data.buffer]);
+  const out = await runWorker({ id: ++uid, kind: 'live', rgba: img.data.buffer, w, h, opts: { pitch: +S.pitch, polarity: S.polarity } }, [img.data.buffer]);
   LV.busy = false; if ($('#live').hidden) return;
   const cv = $('#lvCanvas'), vw = cv.clientWidth, vh = cv.clientHeight, dpr = devicePixelRatio || 1; cv.width = vw * dpr; cv.height = vh * dpr;
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, vw, vh);
@@ -271,7 +271,7 @@ function histCsv() { const a = H.load(); if (!a.length) { toast('History is empt
 
 /* ---------------- wiring ---------------- */
 function bindSettings() {
-  const map = [['#sPitch', 'pitch', true], ['#sMeasure', 'measure'], ['#sMin', 'min', true], ['#sMax', 'max', true], ['#sThr', 'thrMode'], ['#sThrV', 'thr', true], ['#sBins', 'bins'], ['#sShape', 'shape'], ['#sStillW', 'stillW', true], ['#standH', 'standH'], ['#customZ', 'customZ', true]];
+  const map = [['#sPitch', 'pitch', true], ['#sMeasure', 'measure'], ['#sMin', 'min', true], ['#sMax', 'max', true], ['#sPol', 'polarity'], ['#sBright', 'bright', true], ['#sThr', 'thrMode'], ['#sThrV', 'thr', true], ['#sBins', 'bins'], ['#sShape', 'shape'], ['#sStillW', 'stillW', true], ['#standH', 'standH'], ['#customZ', 'customZ', true]];
   for (const [sel, k, num] of map) { const el = $(sel); el.value = S[k]; el.addEventListener('change', () => { S[k] = num ? +el.value : el.value; saveS(); sync(); reanalyse(); }); }
   for (const [sel, k] of [['#sSplit', 'split'], ['#sHeight', 'height']]) { const el = $(sel); el.checked = !!S[k]; el.addEventListener('change', () => { S[k] = el.checked; saveS(); reanalyse(); }); }
   const sync = () => { $('#sThrManualWrap').hidden = S.thrMode !== 'manual'; $('#customZwrap').hidden = S.standH !== 'custom'; };

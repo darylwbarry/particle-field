@@ -5,6 +5,7 @@ Open each `.3mf` in Bambu Studio (File > Open Project), check the filament mappi
 | File | Filament | Time / material | Notes |
 |---|---|---|---|
 | `0_test_coupon_white+black.3mf` | White = 1, Black = 2 (AMS) | about 8 min, 2 g | 32 x 24 mm coupon with the same dots as the tray. Print it first to check dot quality. |
+| `0b_test_coupon_dark_black+white.3mf` | White = 1 (dots), Black = 2 (plate) | about 18 min, 4 g | Side-lit test coupon: black plate, white dots, 18 x 12 mm clear area. For bright particles such as salt, lit from the side. White dots go through the full 1 mm so they look white against the black. Rebuild with `./build_coupon_dark.sh`. |
 | `1_tray_v2_white+black.3mf` | White = 1, Black = 2 (AMS) | about 46 min, 23 g white, 0.4 g black | Calibration tray v2. Dot face down, as exported. |
 | `2_base_body_white.3mf` | White | | Floor down. 3 walls, 15 % gyroid. |
 | `3_lid_spacers_black.3mf` | Black | | Lid (roof down) + 10 mm spacer + 2 x 20 mm spacers on one plate. |

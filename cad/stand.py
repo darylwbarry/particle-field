@@ -159,17 +159,24 @@ def make_tray():
     return white, black
 
 # ---------------- TEST COUPON (10-minute print to check dot quality before the full tray) ----------------
-def make_coupon(ni=13, nj=9, margin=4.0, t=1.0):
-    """Flat plate, printed dot-face down like the tray. 13 x 9 dots with a 3 x 2 window, so the app reads it as window S."""
+def make_coupon(ni=13, nj=9, win=(5, 7, 4, 5), dot_depth=None, margin=4.0, t=1.0):
+    """Flat plate, printed dot-face down like the tray. Dots are missing inside win = (i0, i1, j0, j1).
+    Default: 13 x 9 dots with a 3 x 2 window (the app reads it as window S). Returns (plate, dots)."""
+    depth = DOT_DEPTH if dot_depth is None else dot_depth
     w, h = (ni - 1) * P + 2 * margin, (nj - 1) * P + 2 * margin
     body = box(0, w, 0, h, 0, t)
-    black = None
+    dots = None
     for i in range(ni):
         for j in range(nj):
-            if 5 <= i <= 7 and 4 <= j <= 5: continue
-            c = cq.Workplane("XY").circle(DOT_D / 2).extrude(DOT_DEPTH).translate((margin + i * P, margin + j * P, 0))
-            black = c if black is None else black.union(c, clean=False)
-    return body.cut(black), black
+            if win[0] <= i <= win[1] and win[2] <= j <= win[3]: continue
+            c = cq.Workplane("XY").circle(DOT_D / 2).extrude(depth).translate((margin + i * P, margin + j * P, 0))
+            dots = c if dots is None else dots.union(c, clean=False)
+    return body.cut(dots), dots
+
+def make_coupon_dark():
+    """Side-lit test coupon: BLACK plate with WHITE dots and a window-L sized clear area (18 x 12 mm).
+    The white dots go through the full plate thickness so they look white, not grey, against the black."""
+    return make_coupon(ni=13, nj=10, win=(2, 10, 2, 7), dot_depth=1.0)
 
 # ---------------- SPACERS ----------------
 def make_spacer(h):
@@ -218,6 +225,7 @@ if __name__ == "__main__":
     flip = lambda s: s.rotate((0, 0, 0), (1, 0, 0), 180).translate((0, 0, TRAY_H))
     export(flip(white), "tray_white"); export(flip(black), "tray_black")
     cw, cb = make_coupon(); export(cw, "coupon_white"); export(cb, "coupon_black")
+    dk, dw = make_coupon_dark(); export(dk, "coupon_dark_black"); export(dw, "coupon_dark_white")
     asm_tray = cq.Assembly()
     asm_tray.add(flip(white), name="tray_white", color=cq.Color(0.95, 0.95, 0.95))
     asm_tray.add(flip(black), name="tray_black", color=cq.Color(0.05, 0.05, 0.05))
