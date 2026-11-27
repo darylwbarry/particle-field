@@ -85,6 +85,7 @@ table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:6px 4px;
 <body>
 <header>
   <h1>Particle Field</h1>
+  <button id="btnAbout" type="button">About</button>
   <button id="btnSettings" type="button" aria-label="Settings">Settings</button>
 </header>
 
@@ -212,8 +213,31 @@ table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:6px 4px;
     <p class="hint">Changing pitch, threshold, splitting or height correction re-analyses all photos. Size limits, measure and classes update instantly.</p>
     <div class="row" style="margin-top:14px;justify-content:space-between">
       <span class="hint" id="verLine"></span>
-      <button class="btn sm" id="btnUpdate" type="button">Check for update</button>
+      <button class="btn sm" id="btnAbout2" type="button">About</button>
     </div>
+  </div>
+</div>
+
+<div class="sheet" id="about" hidden>
+  <div class="panel">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0;font-size:18px">About</h2><button class="btn sm" id="aboutClose" type="button">Done</button></div>
+    <div class="row" style="margin-top:14px;gap:14px;flex-wrap:nowrap">
+      <img src="icon-192.png" alt="" width="64" height="64" style="border-radius:14px">
+      <div><div style="font-size:20px;font-weight:650">Particle Field</div>
+        <div id="aboutVer" style="font-size:16px;margin-top:2px"></div>
+        <div class="hint" id="aboutBuild"></div></div>
+    </div>
+    <p class="hint" style="margin-top:14px">Measures particle size distributions (about 100–2000 µm) from phone photos of the Particle Field calibration tray. Every photo calibrates itself from the tray's dot grid. Photos are analysed on this device and are not uploaded.</p>
+    <table style="margin-top:6px">
+      <tr><td>Lighting modes</td><td>Backlit (dark on white), side-lit (bright on black)</td></tr>
+      <tr><td>Tray dot pitch in use</td><td id="aboutPitch"></td></tr>
+      <tr><td>Running as</td><td id="aboutMode"></td></tr>
+    </table>
+    <div class="row" style="margin-top:14px">
+      <button class="btn sm" id="btnUpdate" type="button">Check for update</button>
+      <a class="btn sm" style="text-decoration:none" href="https://github.com/darylwbarry/particle-field#4-step-by-step-use" target="_blank" rel="noopener">How to use</a>
+    </div>
+    <p class="hint" style="margin-top:10px">Check for update reloads the newest version. It needs a connection and clears photos in the current session; saved history and settings stay.</p>
   </div>
 </div>
 

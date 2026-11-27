@@ -1,7 +1,7 @@
 /* Particle Field — mobile UI. Measurement lives in core.js (runs in worker.js). */
 'use strict';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
-const VERSION = '1.2.0';              // keep in step with the cache name in sw.js
+const VERSION = '1.2.0', BUILD = '2026-11-27';              // keep in step with the cache name in sw.js
 const MAXPIX = 16.0e6;               // iOS canvas limit is 16.7 MP; 48 MP photos are downscaled 2x (≈ their real resolution)
 const OVC = { ok: '#35e0c2', fine: '#ffb020', coarse: '#be96ff', edge: '#80929a' };
 
@@ -297,6 +297,18 @@ function init() {
     navigator.geolocation.getCurrentPosition(p => { geo = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy }; $('#geoText').textContent = `${geo.lat.toFixed(5)}, ${geo.lon.toFixed(5)} (±${Math.round(geo.acc)} m)`; },
       e => { $('#geoText').textContent = ''; toast('Location unavailable: ' + e.message); }, { enableHighAccuracy: true, timeout: 15000 }); };
   $('#verLine').textContent = 'Version ' + VERSION;
+  const openAbout = () => {
+    $('#aboutVer').textContent = 'Version ' + VERSION;
+    $('#aboutBuild').textContent = 'Released ' + BUILD;
+    $('#aboutPitch').textContent = (+S.pitch).toFixed(4) + ' mm' + (+S.pitch === 2 ? ' (nominal, not yet measured)' : '');
+    const native = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    $('#aboutMode').textContent = native ? 'Installed app' : standalone ? 'Home-screen web app' : 'Web page in a browser';
+    $('#settings').hidden = true; $('#about').hidden = false;
+  };
+  $('#btnAbout').onclick = openAbout; $('#btnAbout2').onclick = openAbout;
+  $('#aboutClose').onclick = () => $('#about').hidden = true;
+  $('#about').addEventListener('click', e => { if (e.target.id === 'about') $('#about').hidden = true; });
   $('#btnUpdate').onclick = async () => {
     toast('Checking for update…');
     try {
