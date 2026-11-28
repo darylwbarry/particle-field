@@ -14,7 +14,9 @@
 
 const LAYOUT = {
   pitch_mm: 2.0, dot_d_mm: 1.0, ni: 33, nj: 22, roi_margin_mm: 0.5,
-  windows: [ { name: 'L', i0: 6, i1: 14, j0: 8, j1: 13 }, { name: 'S', i0: 22, i1: 24, j0: 10, j1: 11 } ]
+  windows: [ { name: 'L', i0: 6, i1: 14, j0: 8, j1: 13 }, { name: 'S', i0: 22, i1: 24, j0: 10, j1: 11 } ],
+  // window sizes that exist only on printed reference cards (20 x 13 missing dots = 40 x 26 mm open area)
+  card_windows: [ { name: 'XL', i0: 0, i1: 19, j0: 0, j1: 12 } ]
 };
 
 /* ---------------- basic image ops ---------------- */
@@ -363,6 +365,8 @@ function planeResiduals(pts, fit, pitch) {
 }
 
 /** Full calibration from a full-res linear grey image. */
+// White reference: 98th percentile, or (when the bright things are sparse, e.g. a few white dots on a black card) the 99.7th.
+function whiteLevel(sorted) { const q = p => sorted[Math.floor(p * (sorted.length - 1))] || 0, a = q(0.98), b = q(0.997); return (a < 0.35 * b ? b : a) || 1; }
 function invertAbout(g, ref) { const o = new Float32Array(g.length); for (let i = 0; i < g.length; i++) { const v = ref - g[i]; o[i] = v > 0 ? v : 0; } return o; }
 function calibrate(g, w, h, opts = {}) {
   const lay = opts.layout || LAYOUT, pitch = opts.pitch_mm || lay.pitch_mm;
@@ -371,7 +375,7 @@ function calibrate(g, w, h, opts = {}) {
   // particles on a black tray lit from the side. Bright scenes are inverted about a white reference so the
   // rest of the pipeline is identical.
   const smp = []; for (let i = 0; i < d.g.length; i += 7) smp.push(d.g[i]); smp.sort((a, b) => a - b);
-  const med = smp[smp.length >> 1], whiteRef = smp[Math.floor(0.98 * (smp.length - 1))] || 1;
+  const med = smp[smp.length >> 1], whiteRef = whiteLevel(smp);
   const want = opts.polarity || 'auto';
   const order = want === 'dark' ? ['dark'] : want === 'bright' ? ['bright'] : med < 0.4 * whiteRef ? ['bright', 'dark'] : ['dark', 'bright'];
   let L = null, polarity = order[0];
@@ -406,20 +410,20 @@ function calibrate(g, w, h, opts = {}) {
   const inImg = (i, j) => { const q = fit.D.dist(...apply(fit.H, i * pitch, j * pitch)), m = 0.3 * pitchPx; return q[0] > m && q[1] > m && q[0] < w - m && q[1] < h - m; };
   const state = (i, j) => occ.has(K(i, j)) ? 1 : inImg(i, j) ? 0 : -1;
   let best = null;
-  for (const win of lay.windows) for (const sw of [false, true]) {
+  for (const win of lay.windows.concat(lay.card_windows || [])) for (const sw of [false, true]) {
     const di = sw ? win.j1 - win.j0 + 1 : win.i1 - win.i0 + 1, dj = sw ? win.i1 - win.i0 + 1 : win.j1 - win.j0 + 1;
     for (let a = i0 - di; a <= i1 + 1; a++) for (let b = j0 - dj; b <= j1 + 1; b++) {
-      let sc = 0, inside = 0, ins = 0, ringP = 0;
+      let sc = 0, inside = 0, ins = 0, ringP = 0, ringN = 0;
       for (let i = a - 1; i <= a + di; i++) for (let j = b - 1; j <= b + dj; j++) {
         const s = state(i, j), isIn = i >= a && i < a + di && j >= b && j < b + dj;
         if (isIn) { if (s >= 0) ins++; if (s === 0) { sc += 1; inside++; } else if (s === 1) sc -= 3; }
-        else { if (s === 1) { sc += 1; ringP++; } else if (s === 0) sc -= 2; }
+        else { if (s >= 0) ringN++; if (s === 1) { sc += 1; ringP++; } else if (s === 0) sc -= 2; }
       }
-      if (ins < 0.5 * di * dj || inside < 0.8 * ins || ringP < 6) continue;
+      if (ins < 0.5 * di * dj || inside < 0.8 * ins || ringP < 6 || ringP < 0.7 * ringN) continue;
       if (!best || sc > best.sc) best = { sc, win, a, b, di, dj };
     }
   }
-  if (!best) return { ok: false, why: 'Dots found, but no sample window (L or S) is in view. Centre the camera over a window.' };
+  if (!best) return { ok: false, why: 'Dots found, but no sample window is in view. Centre the camera over the open area.' };
   const dotDiaMm = isFinite(R.dotDiaPx) ? R.dotDiaPx * pitch / pitchPx : lay.dot_d_mm;
   const r = Math.max(lay.dot_d_mm / 2, Math.min(dotDiaMm / 2, 0.48 * pitch)), mg = lay.roi_margin_mm;
   const roi = [(best.a - 1) * pitch + r + mg, (best.a + best.di) * pitch - r - mg, (best.b - 1) * pitch + r + mg, (best.b + best.dj) * pitch - r - mg];
@@ -431,10 +435,58 @@ function calibrate(g, w, h, opts = {}) {
   // fraction of ROI inside the frame
   return cal;
 }
+/* ---------------- coin reference (quick estimates without a printed pattern) ---------------- */
+const COINS = {
+  us_quarter: { name: 'US quarter', d: 24.26, t: 1.75 }, us_nickel: { name: 'US nickel', d: 21.21, t: 1.95 },
+  us_penny: { name: 'US penny', d: 19.05, t: 1.52 }, us_dime: { name: 'US dime', d: 17.91, t: 1.35 },
+  eur_1: { name: '1 euro', d: 23.25, t: 2.33 }, eur_2: { name: '2 euro', d: 25.75, t: 2.20 }
+};
+/** Scale and tilt from one round object of known diameter lying beside the sample.
+ *  opts: coinDiaMm, coinThickMm, polarity ('auto'|'dark'|'bright'). Returns a cal object like calibrate(). */
+function calibrateCoin(g, w, h, opts = {}) {
+  const D = +opts.coinDiaMm, T = +opts.coinThickMm || 0;
+  if (!(D > 0)) return { ok: false, why: 'Choose the coin (or enter its diameter) in Settings.' };
+  const f = Math.max(1, Math.floor(Math.max(w, h) / 1400)), d = downsample(g, w, h, f), n = d.w * d.h;
+  const smp = []; for (let i = 0; i < n; i += 7) smp.push(d.g[i]); smp.sort((a, b) => a - b);
+  const med = smp[smp.length >> 1], whiteRef = whiteLevel(smp);
+  const want = opts.polarity || 'auto', polarity = want === 'auto' ? (med < 0.4 * whiteRef ? 'bright' : 'dark') : want;
+  // the coin is the largest compact, roughly elliptical blob that differs from the surface
+  let best = null;
+  for (const inv of [false, true]) {
+    const G = inv ? invertAbout(d.g, whiteRef) : d.g, bg = background(G, d.w, d.h, Math.round(0.3 * Math.max(d.w, d.h)));
+    let m = new Uint8Array(n); for (let i = 0; i < n; i++) m[i] = G[i] < 0.8 * bg[i] ? 1 : 0;
+    m = fillHoles(morph(morph(m, d.w, d.h, 2, false), d.w, d.h, 2, true), d.w, d.h);
+    const { lab, n: nl } = labelCC(m, d.w, d.h);
+    const A = new Float64Array(nl + 1), SX = new Float64Array(nl + 1), SY = new Float64Array(nl + 1), XX = new Float64Array(nl + 1), YY = new Float64Array(nl + 1), XY = new Float64Array(nl + 1), edge = new Uint8Array(nl + 1);
+    for (let y = 0; y < d.h; y++) for (let x = 0; x < d.w; x++) { const L = lab[y * d.w + x]; if (!L) continue; A[L]++; SX[L] += x; SY[L] += y; XX[L] += x * x; YY[L] += y * y; XY[L] += x * y; if (x === 0 || y === 0 || x === d.w - 1 || y === d.h - 1) edge[L] = 1; }
+    for (let L = 1; L <= nl; L++) { if (edge[L] || A[L] < 0.002 * n) continue;
+      const cx = SX[L] / A[L], cy = SY[L] / A[L], sxx = XX[L] / A[L] - cx * cx, syy = YY[L] / A[L] - cy * cy, sxy = XY[L] / A[L] - cx * cy;
+      const tr = sxx + syy, df = Math.sqrt(Math.max(0, (sxx - syy) * (sxx - syy) / 4 + sxy * sxy)), l1 = tr / 2 + df, l2 = tr / 2 - df;
+      const a = 2 * Math.sqrt(l1), b = 2 * Math.sqrt(Math.max(l2, 1e-9)), fill = A[L] / (Math.PI * a * b);
+      if (fill < 0.93 || fill > 1.05 || b / a < 0.6) continue;
+      if (!best || A[L] > best.A) best = { A: A[L], cx, cy, a, b, th: 0.5 * Math.atan2(2 * sxy, sxx - syy) };
+    }
+  }
+  if (!best) return { ok: false, why: 'No coin found. Lay the whole coin flat beside the sample, on a plain surface, fully inside the picture.' };
+  const cx = (best.cx + 0.5) * f - 0.5, cy = (best.cy + 0.5) * f - 0.5, a = best.a * f, b = best.b * f, th = best.th;
+  // The outline seen is the coin's top rim, T above the surface, so it looks slightly large. Camera distance is
+  // estimated from the field of view (phone main cameras and their macro crops see about 1.25 x distance across the long side).
+  let mmPerPx = D / (2 * a), Z = Infinity;
+  if (T > 0) for (let it = 0; it < 3; it++) { Z = Math.max(w, h) * mmPerPx / 1.25; if (Z > 2 * T) mmPerPx = D / (2 * a) * Z / (Z - T); }
+  const e1 = [Math.cos(th), Math.sin(th)], e2 = [-Math.sin(th), Math.cos(th)], k1x = 1 / mmPerPx, k2x = k1x * b / a;
+  const H = [k1x * e1[0], k2x * e2[0], cx, k1x * e1[1], k2x * e2[1], cy, 0, 0, 1];
+  const mg = Math.round(0.02 * Math.min(w, h));
+  const cal = { ok: true, kind: 'coin', w, h, H, Hi: inv3(H), k1: 0, pitch: 2, nDots: 1, rmsUm: 0, window: 'coin', polarity, whiteRef,
+    edgeWidthPx: NaN, dotCoreRatio: NaN, umPerPx: mmPerPx * 1000 * Math.sqrt(a / b), tiltDeg: Math.acos(Math.min(1, b / a)) * 180 / Math.PI, camDistMm: Z,
+    coin: { cx, cy, a, b, th }, exclude: { cx, cy, a: a * 1.12 + 6, b: b * 1.12 + 6, th },
+    roiImg: [[mg, mg], [w - mg, mg], [w - mg, h - mg], [mg, h - mg]], roi: [0, 0, 0, 0] };
+  return cal;
+}
 function toPlane(cal, x, y) { const D = mkDist(cal.w, cal.h, cal.k1), u = D.und(x, y); return apply(cal.Hi, u[0], u[1]); }
 function toImage(cal, X, Y) { const D = mkDist(cal.w, cal.h, cal.k1); return D.dist(...apply(cal.H, X, Y)); }
 function jacDet(cal, x, y) { const a = toPlane(cal, x, y), b = toPlane(cal, x + 1, y), c = toPlane(cal, x, y + 1); return Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])); }
 function roiPolygon(cal, n = 16) {
+  if (cal.roiImg) return cal.roiImg;
   const [x0, x1, y0, y1] = cal.roi, P = [], C = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
   for (let e = 0; e < 4; e++) { const A = C[e], B = C[(e + 1) % 4]; for (let k = 0; k < n; k++) { const t = k / n; P.push(toImage(cal, A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t)); } }
   return P;
@@ -466,6 +518,11 @@ function measureParticles(g, w, h, cal, opts = {}) {
   for (let Y = 0; Y < ch; Y++) for (let X = 0; X < cw; X++) { let s = 0; for (let dy = 0; dy < f; dy++) { const r = (by0 + Y * f + dy) * w + bx0 + X * f; for (let dx = 0; dx < f; dx++) s += g[r + dx]; } gc[Y * cw + X] = s * kf; }
   const umpx = cal.umPerPx * f;                      // approximate, at ROI centre, crop pixels
   const inR = polyMask(poly, bx0, by0, cw, ch, f);
+  if (cal.exclude) {            // keep the reference coin (and a margin around it) out of the measured area
+    const E = cal.exclude, c = Math.cos(E.th), s = Math.sin(E.th);
+    for (let Y = 0; Y < ch; Y++) for (let X = 0; X < cw; X++) { const dx = bx0 + (X + 0.5) * f - 0.5 - E.cx, dy = by0 + (Y + 0.5) * f - 0.5 - E.cy;
+      const u = (dx * c + dy * s) / E.a, v = (-dx * s + dy * c) / E.b; if (u * u + v * v <= 1) inR[Y * cw + X] = 0; }
+  }
   // flat field
   const bg = background(gc, cw, ch, 0.6 * o.maxSizeUm / umpx + 4);
   const r = new Float32Array(n); for (let i = 0; i < n; i++) r[i] = gc[i] / (bg[i] || 1e-6);
@@ -544,7 +601,7 @@ function quality(cal) {
   const dotsCrisp = !(cal.dotDiaMm > 1.3 * LAYOUT.dot_d_mm);
   const sig = dotsCrisp ? cal.edgeWidthPx / 2.56 : NaN;
   const edgeTerm = 0.25 / px200 * 100, blurTerm = isFinite(sig) ? Math.max(0, sig - 2) * 0.6 / px200 * 100 : 0;
-  const scaleTerm = Math.hypot(cal.rmsUm / (cal.pitch * 1000) / Math.sqrt(Math.max(1, cal.nDots)) * 100 * 3, 0.1);
+  const scaleTerm = cal.kind === 'coin' ? 3 : Math.hypot(cal.rmsUm / (cal.pitch * 1000) / Math.sqrt(Math.max(1, cal.nDots)) * 100 * 3, 0.1);
   const est = Math.hypot(edgeTerm, blurTerm, scaleTerm);
   let level = 'good', msg = '';
   if (px200 < 12) { level = 'bad'; msg = `Too coarse: 200 µm spans only ${px200.toFixed(1)} px. Use a closer setting or a clip-on macro lens.`; }
@@ -587,6 +644,6 @@ function stats(sizes, masses, bins = '2') {
   return st;
 }
 
-const API = { LAYOUT, grayLinear, downsample, boxBlur, background, calibrate, measureParticles, quality, stats, toPlane, toImage, roiPolygon, fitH, apply, inv3, mkDist };
+const API = { LAYOUT, COINS, calibrateCoin, grayLinear, downsample, boxBlur, background, calibrate, measureParticles, quality, stats, toPlane, toImage, roiPolygon, fitH, apply, inv3, mkDist };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.PF = API;
 })(typeof self !== 'undefined' ? self : this);

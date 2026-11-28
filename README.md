@@ -214,6 +214,17 @@ To change a diagram, edit `docs/make_diagrams.py` and run `python3 docs/make_dia
 
 ---
 
+## 4a. Quick estimate (no stand)
+
+For a fast size check that beats judging by eye, switch **Capture → Quick estimate**. Results are shown as "≈" values rounded to two figures, with a typical-error line; use Precise mode with the stand when you need the 5 % figure.
+
+| Reference | How | Typical error |
+|---|---|---|
+| **Printed reference card** (best) | Tap **Print reference cards (PDF)** in the app (also at `www/reference_cards.pdf`). Print at 100 % on heavy matte paper, check the 100 mm bar, cut, fold and glue each white/black pair. Sprinkle the sample inside the dotted frame: white side for dark particles, black side for light ones. Photograph hand-held from straight above with every dot in view. | about 3–8 % |
+| **Coin or other round, flat object** | Choose the coin (US quarter, nickel, penny, dime, 1 or 2 euro) or enter a diameter. Spread the sample on a plain contrasting surface, lay the coin flat beside it, touching nothing, and shoot from straight above. Everything in the photo except the coin is measured. | about 5–10 % |
+
+The card gives scale, tilt and lens distortion from its dots; a coin gives scale and tilt only. In both cases particles under 6 pixels across are marked "too small to size" and left out, and the app states that cut-off (typically 200–450 µm hand-held), so fines are missing from quick results. Move closer to lower it. `film/make_reference_cards.py` regenerates the card PDF.
+
 ## 5. Building the phone apps
 
 The app is plain HTML/JS in `www/`. You can use it three ways:

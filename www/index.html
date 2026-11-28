@@ -102,7 +102,14 @@ table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:6px 4px;
       </div>
     </div>
     <div class="card">
-      <h2>Photograph the tray</h2>
+      <h2 id="capTitle">Photograph the tray</h2>
+      <div class="seg" id="modeSeg" style="margin-bottom:12px"><button type="button" data-m="precise">Precise (tray)</button><button type="button" data-m="quick">Quick estimate</button></div>
+      <div id="quickBox" hidden style="margin-bottom:12px">
+        <label class="f" for="sRef">Size reference in the photo</label>
+        <select id="sRef"><option value="card">Printed reference card</option><option value="us_quarter">US quarter (24.26 mm)</option><option value="us_nickel">US nickel (21.21 mm)</option><option value="us_penny">US penny (19.05 mm)</option><option value="us_dime">US dime (17.91 mm)</option><option value="eur_1">1 euro (23.25 mm)</option><option value="eur_2">2 euro (25.75 mm)</option><option value="custom">Other round, flat object…</option></select>
+        <div id="refDiaWrap" hidden><label class="f" for="sRefDia">Its diameter (mm)</label><input id="sRefDia" type="number" step="0.01" min="3" max="100" value="25"></div>
+        <a class="btn" id="btnCards" href="reference_cards.pdf" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-top:10px">Print reference cards (PDF)</a>
+      </div>
       <div class="row">
         <button class="btn primary big" id="btnShoot" type="button">Take photo</button>
         <button class="btn big" id="btnImport" type="button">Import photos</button>
@@ -110,9 +117,9 @@ table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:6px 4px;
       <input type="file" id="fileShoot" accept="image/*" capture="environment" hidden>
       <input type="file" id="fileImport" accept="image/*" multiple hidden>
       <button class="btn" id="btnLive" type="button" style="width:100%;margin-top:10px">Align camera (live check)</button>
-      <p class="hint" style="margin-top:12px">Spread particles thinly in window <b>L</b> (phone macro) or <b>S</b> (clip-on lens) so few touch. Light the stand from the back or side port. Lay the phone on the deck with the lens over the window, tap the tray to focus, then shoot. Every photo calibrates itself from the dots, so take as many as you need for a good count — 500+ particles gives stable D10/D50/D90.</p>
+      <p class="hint" id="capHint" style="margin-top:12px"></p>
     </div>
-    <div class="card">
+    <div class="card" id="standCard">
       <h2>Stand setup</h2>
       <label class="f" for="standH">Stand height</label>
       <select id="standH">
@@ -229,6 +236,7 @@ table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:6px 4px;
     </div>
     <p class="hint" style="margin-top:14px">Measures particle size distributions (about 100–2000 µm) from phone photos of the Particle Field calibration tray. Every photo calibrates itself from the tray's dot grid. Photos are analysed on this device and are not uploaded.</p>
     <table style="margin-top:6px">
+      <tr><td>Modes</td><td>Precise (stand + tray) · Quick estimate (reference card or coin)</td></tr>
       <tr><td>Lighting modes</td><td>Backlit (dark on white), side-lit (bright on black)</td></tr>
       <tr><td>Tray dot pitch in use</td><td id="aboutPitch"></td></tr>
       <tr><td>Running as</td><td id="aboutMode"></td></tr>

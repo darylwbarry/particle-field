@@ -1,17 +1,24 @@
 /* Particle Field — mobile UI. Measurement lives in core.js (runs in worker.js). */
 'use strict';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
-const VERSION = '1.2.0', BUILD = '2026-11-27';              // keep in step with the cache name in sw.js
+const VERSION = '1.3.0', BUILD = '2026-11-28';              // keep in step with the cache name in sw.js
 const MAXPIX = 16.0e6;               // iOS canvas limit is 16.7 MP; 48 MP photos are downscaled 2x (≈ their real resolution)
 const OVC = { ok: '#35e0c2', fine: '#ffb020', coarse: '#be96ff', edge: '#80929a' };
 
 /* ---------------- settings ---------------- */
-const DEF = { pitch: 2.0, measure: 'ecd', min: 80, max: 0, thrMode: 'half', thr: 0.5, split: true, height: true, bins: '2', shape: 'sphere', stillW: 4032, standH: '21', customZ: 25, basis: 'number', polarity: 'auto', bright: 15 };
+const DEF = { pitch: 2.0, measure: 'ecd', min: 80, max: 0, thrMode: 'half', thr: 0.5, split: true, height: true, bins: '2', shape: 'sphere', stillW: 4032, standH: '21', customZ: 25, basis: 'number', polarity: 'auto', bright: 15, mode: 'precise', ref: 'card', refDia: 25 };
 let S = Object.assign({}, DEF);
 try { Object.assign(S, JSON.parse(localStorage.getItem('pf.settings') || '{}')); } catch (e) {}
 const saveS = () => { try { localStorage.setItem('pf.settings', JSON.stringify(S)); } catch (e) {} };
 const Zmm = () => S.standH === 'custom' ? +S.customZ : +S.standH;
-const analysisKey = () => JSON.stringify([S.pitch, S.thrMode, S.thr, S.split, S.height, Zmm(), S.polarity, S.bright]);
+const QUICK_MIN_PX = 6;              // quick estimates do not size anything smaller than this many pixels across
+const quick = () => S.mode === 'quick';
+function refObj() {                  // the round reference object for quick estimates, or null when the printed card is used
+  if (!quick() || S.ref === 'card') return null;
+  if (S.ref === 'custom') return +S.refDia > 0 ? { name: `${+S.refDia} mm round object`, d: +S.refDia, t: 0 } : { name: 'round object', d: 0, t: 0 };
+  return window.PF.COINS[S.ref] || null;
+}
+const analysisKey = () => JSON.stringify([S.pitch, S.thrMode, S.thr, S.split, S.height, Zmm(), S.polarity, S.bright, S.mode, S.ref, S.refDia]);
 
 /* ---------------- state ---------------- */
 const IM = [];            // { id, name, file, thumb, state:'queued'|'busy'|'done'|'fail', why, cal, res, q, prev, key }
@@ -26,6 +33,7 @@ let toastT = 0;
 function toast(t) { const el = $('#toast'); el.textContent = t; el.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => el.hidden = true, 4200); }
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = v => !isFinite(v) ? '–' : v >= 1000 ? Math.round(v).toLocaleString() : v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2);
+const fmt2 = v => !isFinite(v) ? '–' : Number(v.toPrecision(2)).toLocaleString();   // two significant figures, for estimates
 const fpct = v => !isFinite(v) ? '–' : v >= 10 ? v.toFixed(1) : v >= 0.1 ? v.toFixed(2) : v > 0 ? v.toPrecision(2) : '0';
 
 async function decode(file) {
@@ -57,13 +65,16 @@ async function pump() {
     const d = await decode(r.file);
     if (!r.thumb) r.thumb = thumbOf(d.canvas);
     const img = d.canvas.getContext('2d').getImageData(0, 0, d.w, d.h);
-    const opts = { pitch: +S.pitch, polarity: S.polarity, brightThr: (+S.bright || 15) / 100, thrMode: S.thrMode, thr: +S.thr, split: S.split, heightZmm: S.height ? Zmm() : 0, maxSizeUm: S.max > 0 ? Math.max(+S.max, 500) : 2500 };
+    const q = quick(), ro = refObj();
+    if (q && S.ref === 'custom' && !(ro.d > 0)) throw new Error('enter the diameter of the reference object first');
+    const opts = { pitch: +S.pitch, polarity: S.polarity, brightThr: (+S.bright || 15) / 100, thrMode: S.thrMode, thr: +S.thr, split: S.split, heightZmm: !q && S.height ? Zmm() : 0, maxSizeUm: S.max > 0 ? Math.max(+S.max, 500) : q ? 5000 : 2500,
+      quick: q, coinDia: ro ? ro.d : 0, coinThick: ro ? ro.t : 0 };
     const key = analysisKey();
     const out = await runWorker({ id: ++uid, rgba: img.data.buffer, w: d.w, h: d.h, opts }, [img.data.buffer]);
     if (!IM.includes(r)) { busy = false; pump(); return; }
-    if (out.ok) { Object.assign(r, { state: 'done', cal: out.cal, res: out.res, q: out.q, key, why: '' }); r.prev = previewOf(d.canvas, out.res); r.scaled = d.scaled; }
+    if (out.ok) { Object.assign(r, { state: 'done', cal: out.cal, res: out.res, q: out.q, key, why: '', quick: q, refName: ro ? ro.name : 'Reference card', minUm: q ? QUICK_MIN_PX * out.cal.umPerPx * (out.res.f || 1) : 0 }); r.prev = previewOf(d.canvas, out.res); r.scaled = d.scaled; }
     else Object.assign(r, { state: 'fail', why: out.why, key });
-  } catch (e) { Object.assign(r, { state: 'fail', why: 'Could not open this photo (' + (e.message || e) + '). Try JPEG.' }); }
+  } catch (e) { Object.assign(r, { state: 'fail', why: /diameter/.test(e.message || '') ? 'Quick estimate: ' + e.message + '.' : 'Could not open this photo (' + (e.message || e) + '). Try JPEG.' }); }
   busy = false; renderAll(); pump();
 }
 function addFiles(files) {
@@ -82,7 +93,7 @@ function derive() {
     for (const p of r.res.parts) {
       p.size = S.measure === 'ecd' ? p.ecd : S.measure === 'fmin' ? p.fmin : p.fmax;
       p.vol = S.shape === 'sphere' ? Math.PI / 6 * p.ecd ** 3 : Math.PI / 6 * p.fmax * p.fmin * p.fmin;
-      p.status = p.edge ? 'edge' : p.size < S.min ? 'fine' : (S.max > 0 && p.size > S.max) ? 'coarse' : 'ok';
+      p.status = p.edge ? 'edge' : p.size < (r.quick ? r.minUm : S.min) ? 'fine' : (S.max > 0 && p.size > S.max) ? 'coarse' : 'ok';
       p.img = r.name; if (p.status === 'ok') all.push(p); } }
   return all;
 }
@@ -103,7 +114,8 @@ function renderImages() {
     else if (r.state === 'fail') { badge = '<span class="badge bad">No result</span>'; line = esc(r.why); }
     else { const q = r.q, lv = q.level, n = r.res.parts.filter(p => p.status === 'ok').length;
       badge = `<span class="badge ${lv}">${lv === 'good' ? 'Good' : lv === 'warn' ? 'Check' : 'Too coarse'}</span>`;
-      line = `Window ${r.cal.window} · ${r.cal.umPerPx.toFixed(2)} µm/px · ${n} counted`; }
+      line = `Window ${r.cal.window} · ${r.cal.umPerPx.toFixed(2)} µm/px · ${n} counted`;
+      if (r.quick) { badge = '<span class="badge busy">Estimate</span>'; line = `${esc(r.cal.kind === 'coin' ? r.refName : 'Card ' + r.cal.window)} · ${r.cal.umPerPx.toFixed(1)} µm/px · ${n} counted · sizes from ${fmt2(r.minUm)} µm`; } }
     return `<li data-i="${i}">${r.thumb ? `<img src="${r.thumb}" alt="">` : '<img alt="">'}<div class="meta"><b>${esc(r.name)}</b><span class="hint">${line}</span></div>${badge}<button class="btn sm" data-rm="${i}" type="button" aria-label="Remove">✕</button></li>`;
   }).join('');
 }
@@ -115,11 +127,15 @@ function renderResults() {
   const tiles = $('#tiles');
   if (!st) { tiles.innerHTML = '<div class="empty" style="grid-column:1/-1">Results appear here once a photo is analysed.</div>'; $('#hist').innerHTML = $('#cum').innerHTML = ''; $('#classTable').innerHTML = ''; $('#accLine').textContent = ''; renderHistory(); return; }
   const b = mass ? st.mass : st.number;
-  const T = (k, v, u = 'µm') => `<div class="tile"><div class="k">${k}</div><div class="v">${fmt(v)}</div><div class="u">${u}</div></div>`;
+  const qs = IM.filter(r => r.state === 'done' && r.quick), isQ = qs.length > 0;
+  const T = (k, v, u = 'µm') => `<div class="tile"><div class="k">${k}</div><div class="v">${isQ && u === 'µm' ? '≈ ' + fmt2(v) : fmt(v)}</div><div class="u">${u}</div></div>`;
   tiles.innerHTML = T('D10', b.d10) + T('D50', b.d50) + T('D90', b.d90) + T('Span', b.span, '(D90−D10)/D50') + T(mass ? 'D[4,3]' : 'Mean', mass ? st.d43 : st.number.mean) + T('D[3,2]', st.d32);
   const done = IM.filter(r => r.state === 'done'), um = done.map(r => r.cal.umPerPx).sort((a, b) => a - b), est = done.map(r => r.q.est200pct).sort((a, b) => a - b);
   const worst = done.reduce((w, r) => r.q.level === 'bad' ? 'bad' : r.q.level === 'warn' && w !== 'bad' ? 'warn' : w, 'good');
-  $('#accLine').innerHTML = `Scale ${um[0].toFixed(2)}–${um[um.length - 1].toFixed(2)} µm/px · expected single-particle error at 200 µm ≈ ±${est[est.length >> 1].toFixed(1)} %` + (worst !== 'good' ? ` · <b style="color:var(--${worst})">some photos need checking (Photos tab)</b>` : '');
+  if (isQ) { const eff = qs.map(r => r.minUm / QUICK_MIN_PX).sort((a, b) => a - b), e = eff[eff.length >> 1], coin = qs.some(r => r.cal.kind === 'coin');
+    const err = Math.hypot(50 * e / b.d50, coin ? 3 : 1.5), mn = Math.max(...qs.map(r => r.minUm));
+    $('#accLine').innerHTML = `<b>Quick estimate</b> · scale ${um[0].toFixed(1)}–${um[um.length - 1].toFixed(1)} µm/px · typical error ≈ ±${err < 10 ? err.toFixed(0) : Number(err.toPrecision(1))} % at D50 · nothing under ${fmt2(mn)} µm is sized, so fines are missing from these numbers`; }
+  else $('#accLine').innerHTML = `Scale ${um[0].toFixed(2)}–${um[um.length - 1].toFixed(2)} µm/px · expected single-particle error at 200 µm ≈ ±${est[est.length >> 1].toFixed(1)} %` + (worst !== 'good' ? ` · <b style="color:var(--${worst})">some photos need checking (Photos tab)</b>` : '');
   $('#histTitle').textContent = `Share of ${mass ? 'volume' : 'count'} per size class (${S.measure === 'ecd' ? 'ECD' : S.measure === 'fmin' ? 'Feret min' : 'Feret max'})`;
   renderHist(st, mass); renderCum(st); renderClassTable(st); renderHistory();
 }
@@ -163,7 +179,11 @@ function openViewer(i) {
   if (r.state !== 'done') { if (r.state === 'fail') toast(r.why); return; }
   V.r = r; $('#viewer').hidden = false; $('#vTitle').textContent = r.name;
   const c = r.cal, q = r.q, n = r.res.parts.filter(p => p.status === 'ok').length, ne = r.res.parts.filter(p => p.status === 'edge').length;
-  $('#vInfo').innerHTML = `<b style="color:${q.level === 'good' ? '#4fd1a5' : q.level === 'warn' ? '#ffc04d' : '#ff6b77'}">${esc(q.msg)}</b><br>
+  const lg = `<div class="legend"><span><i style="background:${OVC.ok}"></i>Counted</span><span><i style="background:${OVC.fine}"></i>${r.quick ? 'Too small to size' : 'Below min'}</span><span><i style="background:${OVC.coarse}"></i>Above max</span><span><i style="background:${OVC.edge}"></i>Cut by edge</span></div>`;
+  if (r.quick) $('#vInfo').innerHTML = `<b style="color:#8fd3ff">Quick estimate</b> · sizes from ${fmt2(r.minUm)} µm up<br>
+   ${c.kind === 'coin' ? `Scale from ${esc(r.refName)} (red outline) · camera tilt ≈ ${c.tiltDeg.toFixed(0)}°${c.tiltDeg > 25 ? ' <b style="color:#ffc04d">– shoot from straighter above</b>' : ''}` : `Reference card ${c.window} · ${c.nDots} dots`} · ${c.umPerPx.toFixed(1)} µm/px · ${c.polarity === 'bright' ? 'light particles on dark' : 'dark particles on light'}<br>
+   ${n} counted · ${ne} cut by the edge${r.scaled ? ' · photo downscaled to 16 MP' : ''}${lg}`;
+  else $('#vInfo').innerHTML = `<b style="color:${q.level === 'good' ? '#4fd1a5' : q.level === 'warn' ? '#ffc04d' : '#ff6b77'}">${esc(q.msg)}</b><br>
    ${c.polarity === 'bright' ? 'Side-lit (bright on black)' : 'Backlit (dark on white)'} · Window ${c.window} · ${c.umPerPx.toFixed(3)} µm/px · ${c.nDots} dots · fit residual ${c.rmsUm.toFixed(1)} µm · edge blur ≈ ${isFinite(q.blurSigmaPx) ? q.blurSigmaPx.toFixed(1) : '–'} px · est. ±${q.est200pct.toFixed(1)} % at 200 µm<br>
    ${n} counted · ${ne} cut by the window edge${r.scaled ? ' · photo downscaled to 16 MP' : ''}
    <div class="legend"><span><i style="background:${OVC.ok}"></i>Counted</span><span><i style="background:${OVC.fine}"></i>Below min</span><span><i style="background:${OVC.coarse}"></i>Above max</span><span><i style="background:${OVC.edge}"></i>Cut by edge</span></div>`;
@@ -179,6 +199,7 @@ function drawViewer() {
   const T = (X, Y) => [(X - p.x0) * p.s, (Y - p.y0) * p.s];
   x.lineWidth = 2 / V.s; x.strokeStyle = '#ffd400'; x.setLineDash([8 / V.s, 6 / V.s]); x.beginPath();
   r.res.roiPoly.forEach((q, k) => { const [a, b] = T(q[0], q[1]); k ? x.lineTo(a, b) : x.moveTo(a, b); }); x.closePath(); x.stroke(); x.setLineDash([]);
+  if (r.cal.coin) { const e = r.cal.coin, [a, b] = T(e.cx, e.cy); x.strokeStyle = '#ff5a5a'; x.beginPath(); x.ellipse(a, b, e.a * p.s, e.b * p.s, e.th, 0, 2 * Math.PI); x.stroke(); }
   if (V.mode === 'outlines') for (const pt of r.res.parts) { if (!pt.hull || pt.hull.length < 2) continue; x.strokeStyle = OVC[pt.status] || '#fff'; x.lineWidth = 1.6 / V.s; x.beginPath();
     pt.hull.forEach((q, k) => { const [a, b] = T(q[0], q[1]); k ? x.lineTo(a, b) : x.moveTo(a, b); }); x.closePath(); x.stroke();
     if (V.s * p.s > 0.6 && pt.status === 'ok') { const [a, b] = T(pt.cx, pt.cy); x.fillStyle = '#fff'; x.font = `${12 / V.s}px sans-serif`; x.textAlign = 'center'; x.fillText(fmt(pt.size), a, b + 4 / V.s); } }
@@ -216,15 +237,16 @@ async function liveTick() {
   const s = Math.min(1, 1100 / Math.max(v.videoWidth, v.videoHeight)), w = Math.round(v.videoWidth * s), h = Math.round(v.videoHeight * s);
   const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(v, 0, 0, w, h);
   const img = x.getImageData(0, 0, w, h);
-  const out = await runWorker({ id: ++uid, kind: 'live', rgba: img.data.buffer, w, h, opts: { pitch: +S.pitch, polarity: S.polarity } }, [img.data.buffer]);
+  const out = await runWorker({ id: ++uid, kind: 'live', rgba: img.data.buffer, w, h, opts: { pitch: +S.pitch, polarity: S.polarity, quick: quick(), coinDia: (refObj() || {}).d || 0, coinThick: (refObj() || {}).t || 0 } }, [img.data.buffer]);
   LV.busy = false; if ($('#live').hidden) return;
   const cv = $('#lvCanvas'), vw = cv.clientWidth, vh = cv.clientHeight, dpr = devicePixelRatio || 1; cv.width = vw * dpr; cv.height = vh * dpr;
   const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, vw, vh);
   const k = Math.min(vw / w, vh / h), ox = (vw - w * k) / 2, oy = (vh - h * k) / 2;
   g.strokeStyle = 'rgba(255,255,255,.6)'; g.lineWidth = 1; g.beginPath(); g.moveTo(vw / 2 - 20, vh / 2); g.lineTo(vw / 2 + 20, vh / 2); g.moveTo(vw / 2, vh / 2 - 20); g.lineTo(vw / 2, vh / 2 + 20); g.stroke();
-  if (!out.ok) { $('#lvHud').innerHTML = `<b>Looking for the dot grid…</b><br>${esc(out.why || '')}`; return; }
+  if (!out.ok) { $('#lvHud').innerHTML = `<b>Looking for the ${refObj() ? 'coin' : 'dot grid'}…</b><br>${esc(out.why || '')}`; return; }
   g.strokeStyle = '#ffd400'; g.lineWidth = 3; g.beginPath(); out.roiPoly.forEach((q, i) => { const X = ox + q[0] * k, Y = oy + q[1] * k; i ? g.lineTo(X, Y) : g.moveTo(X, Y); }); g.closePath(); g.stroke();
   const umStill = out.fovWmm * 1000 / (+S.stillW || 4032), px200 = 200 / umStill, sig = out.edgeWidthPx / 2.56;
+  if (quick()) { $('#lvHud').innerHTML = `${out.coin ? 'Reference object' : 'Card <b>' + out.window + '</b>'} found · field ≈ ${out.fovWmm.toFixed(0)} mm wide<br>Photo estimate ≈ ${umStill.toFixed(0)} µm/px → sizes from about <b>${fmt2(2 * QUICK_MIN_PX * umStill)} µm</b> up. Move closer to size smaller particles.`; return; }
   const verdict = px200 >= 20 ? '<b style="color:#4fd1a5">resolution OK</b>' : px200 >= 12 ? '<b style="color:#ffc04d">marginal – go closer / use window S + lens</b>' : '<b style="color:#ff6b77">too coarse – go closer or add a macro lens</b>';
   $('#lvHud').innerHTML = `Window <b>${out.window}</b> found · ${out.nDots} dots · field ≈ ${out.fovWmm.toFixed(1)} mm wide<br>
     Photo estimate ≈ ${umStill.toFixed(1)} µm/px → 200 µm ≈ ${px200.toFixed(0)} px · ${verdict}<br>
@@ -239,7 +261,7 @@ async function deliver(name, text) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 const fileBase = () => (meta().sample.replace(/[^\w\-]+/g, '_') || 'sample') + '_' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
-function header() { const m = meta(); return [`# Particle Field export`, `# sample,${csvq(m.sample)}`, `# date,${m.date}`, m.geo ? `# location,${m.geo.lat.toFixed(6)},${m.geo.lon.toFixed(6)},±${Math.round(m.geo.acc)} m` : '', `# tray pitch mm,${S.pitch}`, `# threshold,${S.thrMode}`, `# height correction mm,${S.height ? Zmm() : 'off'}`, `# size measure,${S.measure}`, `# min/max um,${S.min},${S.max || 'none'}`].filter(Boolean).join('\n'); }
+function header() { const m = meta(); return [`# Particle Field export`, `# sample,${csvq(m.sample)}`, `# date,${m.date}`, m.geo ? `# location,${m.geo.lat.toFixed(6)},${m.geo.lon.toFixed(6)},±${Math.round(m.geo.acc)} m` : '', quick() ? `# mode,quick estimate (reference: ${refObj() ? refObj().name : 'printed card'}; sizes are approximate)` : '', `# tray pitch mm,${S.pitch}`, `# threshold,${S.thrMode}`, `# height correction mm,${S.height ? Zmm() : 'off'}`, `# size measure,${S.measure}`, `# min/max um,${S.min},${S.max || 'none'}`].filter(Boolean).join('\n'); }
 const csvq = s => '"' + String(s).replace(/"/g, '""') + '"';
 function expParts() {
   derive(); const rows = ['image,id,ecd_um,feret_min_um,feret_max_um,aspect,roundness,status,um_per_px,window,x_px,y_px'];
@@ -270,11 +292,26 @@ function histCsv() { const a = H.load(); if (!a.length) { toast('History is empt
   deliver('particle_field_history.csv', k.join(',') + '\n' + a.map(h => k.map(x => typeof h[x] === 'number' ? h[x].toFixed(x === 'lat' || x === 'lon' ? 6 : 2) : csvq(h[x] ?? '')).join(',')).join('\n')); }
 
 /* ---------------- wiring ---------------- */
+const HINTS = {
+  precise: 'Spread particles thinly in window <b>L</b> (phone macro) or <b>S</b> (clip-on lens) so few touch. Light the stand from the back or side port. Lay the phone on the deck with the lens over the window, tap the tray to focus, then shoot. Every photo calibrates itself from the dots, so take as many as you need for a good count — 500+ particles gives stable D10/D50/D90.',
+  card: 'No stand needed. Lay the card flat in even light: <b>white side for dark particles, black side for light ones</b>. Sprinkle a thin layer inside the dotted frame so few particles touch. Hold the phone straight above, close enough that the frame fills most of the picture but every dot is visible, tap to focus, shoot. Shade the card rather than use flash.',
+  coin: 'No card needed. Spread the particles thinly on a plain, evenly lit surface that contrasts with them (white paper for dark particles). Lay the reference flat beside them, touching nothing and whole in the picture. Shoot from straight above. Everything in the photo except the reference is measured, so keep paper edges, shadows and clutter out of the frame.'
+};
+function syncMode() {
+  const q = quick(), ro = refObj();
+  $$('#modeSeg button').forEach(x => x.setAttribute('aria-pressed', x.dataset.m === S.mode ? 'true' : 'false'));
+  $('#quickBox').hidden = !q; $('#refDiaWrap').hidden = !(q && S.ref === 'custom'); $('#btnCards').hidden = !(q && S.ref === 'card');
+  $('#capTitle').textContent = q ? 'Photograph the sample' : 'Photograph the tray';
+  $('#capHint').innerHTML = HINTS[!q ? 'precise' : ro ? 'coin' : 'card'];
+  $('#standCard').hidden = q;
+}
 function bindSettings() {
   const map = [['#sPitch', 'pitch', true], ['#sMeasure', 'measure'], ['#sMin', 'min', true], ['#sMax', 'max', true], ['#sPol', 'polarity'], ['#sBright', 'bright', true], ['#sThr', 'thrMode'], ['#sThrV', 'thr', true], ['#sBins', 'bins'], ['#sShape', 'shape'], ['#sStillW', 'stillW', true], ['#standH', 'standH'], ['#customZ', 'customZ', true]];
   for (const [sel, k, num] of map) { const el = $(sel); el.value = S[k]; el.addEventListener('change', () => { S[k] = num ? +el.value : el.value; saveS(); sync(); reanalyse(); }); }
   for (const [sel, k] of [['#sSplit', 'split'], ['#sHeight', 'height']]) { const el = $(sel); el.checked = !!S[k]; el.addEventListener('change', () => { S[k] = el.checked; saveS(); reanalyse(); }); }
-  const sync = () => { $('#sThrManualWrap').hidden = S.thrMode !== 'manual'; $('#customZwrap').hidden = S.standH !== 'custom'; };
+  const sync = () => { $('#sThrManualWrap').hidden = S.thrMode !== 'manual'; $('#customZwrap').hidden = S.standH !== 'custom'; syncMode(); };
+  for (const [sel, k, num] of [['#sRef', 'ref'], ['#sRefDia', 'refDia', true]]) { const el = $(sel); el.value = S[k]; el.addEventListener('change', () => { S[k] = num ? +el.value : el.value; saveS(); syncMode(); reanalyse(); }); }
+  $$('#modeSeg button').forEach(b => b.onclick = () => { S.mode = b.dataset.m; saveS(); syncMode(); reanalyse(); });
   sync();
 }
 function init() {
@@ -306,6 +343,7 @@ function init() {
     $('#aboutMode').textContent = native ? 'Installed app' : standalone ? 'Home-screen web app' : 'Web page in a browser';
     $('#settings').hidden = true; $('#about').hidden = false;
   };
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) $('#btnCards').href = 'https://darylwbarry.github.io/particle-field/reference_cards.pdf';   // opens in the system browser, which can print
   $('#btnAbout').onclick = openAbout; $('#btnAbout2').onclick = openAbout;
   $('#aboutClose').onclick = () => $('#about').hidden = true;
   $('#about').addEventListener('click', e => { if (e.target.id === 'about') $('#about').hidden = true; });

@@ -1,0 +1,31 @@
+import asyncio, json
+from playwright.async_api import async_playwright
+async def main():
+    async with async_playwright() as p:
+        b = await p.chromium.launch(executable_path="/usr/bin/google-chrome")
+        pg = await b.new_page(viewport={"width":390,"height":844}, device_scale_factor=2)
+        logs=[]; pg.on("console", lambda m: logs.append(m.text)); pg.on("pageerror", lambda e: logs.append("PAGEERR "+str(e)))
+        await pg.goto("http://localhost:8765/index.html")
+        await pg.click("#modeSeg button[data-m=quick]"); await pg.screenshot(path="test/q_capture_card.png", full_page=True)
+        await pg.set_input_files("#fileImport", "test/quick_card.jpg")
+        await pg.wait_for_function("document.querySelector('#imgSummary').textContent.includes('1/1')", timeout=120000)
+        print('card', await pg.evaluate("(()=>{const r=IM[0];return r.state==='done'?[r.cal.window,r.cal.umPerPx,r.minUm,_st&&_st.number.d50, r.res.parts.filter(p=>p.status==='ok').length]:r.why})()"))
+        await pg.click("nav button[data-tab=images]"); await pg.click("#imgList li"); await pg.wait_for_timeout(600); await pg.screenshot(path="test/q_view_card.png"); await pg.click("#vClose")
+        await pg.click("#imgList [data-rm]")
+        await pg.click("nav button[data-tab=capture]"); await pg.select_option("#sRef","us_quarter"); await pg.screenshot(path="test/q_capture_coin.png", full_page=True)
+        await pg.set_input_files("#fileImport", "test/quick_coin.jpg")
+        await pg.wait_for_function("document.querySelector('#imgSummary').textContent.includes('1/1')", timeout=120000)
+        print('coin', await pg.evaluate("(()=>{const r=IM[0];return r.state==='done'?[r.cal.window,r.cal.umPerPx,r.minUm,r.cal.tiltDeg, r.res.parts.filter(p=>p.status==='ok').length, r.res.parts.filter(p=>p.status==='fine').length]:r.why})()"))
+        await pg.click("nav button[data-tab=images]"); await pg.wait_for_timeout(200); await pg.screenshot(path="test/q_images.png")
+        await pg.click("#imgList li"); await pg.wait_for_timeout(600); await pg.screenshot(path="test/q_view_coin.png"); await pg.click("#vClose")
+        await pg.click("nav button[data-tab=results]"); await pg.wait_for_timeout(400); await pg.screenshot(path="test/q_results.png")
+        print(await pg.evaluate("(()=>{const s=_st;return [s.n,s.number.d10,s.number.d50,s.number.d90]})()"))
+        print(await pg.evaluate("document.querySelector('#accLine').textContent"))
+        # back to precise: synthetic tray must still work
+        await pg.click("nav button[data-tab=images]"); await pg.click("#imgList [data-rm]"); await pg.click("nav button[data-tab=capture]"); await pg.click("#modeSeg button[data-m=precise]")
+        await pg.set_input_files("#fileImport", "test/synthetic_tray.jpg")
+        await pg.wait_for_function("document.querySelector('#imgSummary').textContent.includes('1/1')", timeout=120000)
+        print('precise', await pg.evaluate("(()=>{const r=IM[0];return r.state==='done'?[r.cal.window,r.cal.umPerPx,r.q.level,_st.number.d50]:r.why})()"))
+        r = await pg.request.get("http://localhost:8765/reference_cards.pdf"); print('pdf', r.status, len(await r.body()))
+        print("logs", logs[:10]); await b.close()
+asyncio.run(main())
