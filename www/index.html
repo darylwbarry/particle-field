@@ -108,7 +108,7 @@ table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:6px 4px;
         <label class="f" for="sRef">Size reference in the photo</label>
         <select id="sRef"><option value="card">Printed reference card</option><option value="us_quarter">US quarter (24.26 mm)</option><option value="us_nickel">US nickel (21.21 mm)</option><option value="us_penny">US penny (19.05 mm)</option><option value="us_dime">US dime (17.91 mm)</option><option value="eur_1">1 euro (23.25 mm)</option><option value="eur_2">2 euro (25.75 mm)</option><option value="custom">Other round, flat object…</option></select>
         <div id="refDiaWrap" hidden><label class="f" for="sRefDia">Its diameter (mm)</label><input id="sRefDia" type="number" step="0.01" min="3" max="100" value="25"></div>
-        <a class="btn" id="btnCards" href="reference_cards.pdf" target="_blank" rel="noopener" style="display:block;text-align:center;text-decoration:none;margin-top:10px">Print reference cards (PDF)</a>
+        <button class="btn" id="btnCards" type="button" style="width:100%;margin-top:10px">Print reference cards</button>
       </div>
       <div class="row">
         <button class="btn primary big" id="btnShoot" type="button">Take photo</button>
@@ -222,6 +222,19 @@ table{width:100%;border-collapse:collapse;font-size:13px} th,td{padding:6px 4px;
       <span class="hint" id="verLine"></span>
       <button class="btn sm" id="btnAbout2" type="button">About</button>
     </div>
+  </div>
+</div>
+
+<div class="sheet" id="cards" hidden>
+  <div class="panel">
+    <div class="row" style="justify-content:space-between"><h2 style="margin:0;font-size:18px">Reference cards</h2><button class="btn sm" id="cardsClose" type="button">Back</button></div>
+    <p class="hint" style="margin-top:10px">One Letter page: two large and two small cards, each with a white and a black side. Print at <b>100 % / Actual size</b> on heavy matte paper, then check that the bar at the bottom measures 100 mm.</p>
+    <button class="btn primary big" id="cardsShare" type="button" style="width:100%;margin-top:6px" hidden>Print or share…</button>
+    <p class="hint" id="cardsShareHint" hidden>Choose <b>Print</b> in the list that opens, or AirDrop / Save to Files to print from a computer.</p>
+    <button class="btn" id="cardsPrint" type="button" style="width:100%;margin-top:8px" hidden>Print</button>
+    <a class="btn" id="cardsSave" href="reference_cards.pdf" download="particle_field_reference_cards.pdf" style="display:block;text-align:center;text-decoration:none;margin-top:8px">Download PDF</a>
+    <img src="reference_cards.png" alt="Preview of the reference card page" style="width:100%;margin-top:12px;border:1px solid var(--line,#ccd);border-radius:8px;background:#fff">
+    <button class="btn" id="cardsClose2" type="button" style="width:100%;margin-top:12px">Back to the app</button>
   </div>
 </div>
 

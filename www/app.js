@@ -1,7 +1,7 @@
 /* Particle Field — mobile UI. Measurement lives in core.js (runs in worker.js). */
 'use strict';
 const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
-const VERSION = '1.3.0', BUILD = '2026-11-28';              // keep in step with the cache name in sw.js
+const VERSION = '1.3.1', BUILD = '2026-11-28';              // keep in step with the cache name in sw.js
 const MAXPIX = 16.0e6;               // iOS canvas limit is 16.7 MP; 48 MP photos are downscaled 2x (≈ their real resolution)
 const OVC = { ok: '#35e0c2', fine: '#ffb020', coarse: '#be96ff', edge: '#80929a' };
 
@@ -343,7 +343,22 @@ function init() {
     $('#aboutMode').textContent = native ? 'Installed app' : standalone ? 'Home-screen web app' : 'Web page in a browser';
     $('#settings').hidden = true; $('#about').hidden = false;
   };
-  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) $('#btnCards').href = 'https://darylwbarry.github.io/particle-field/reference_cards.pdf';   // opens in the system browser, which can print
+  // Reference cards: shown inside the app (a PDF opened directly traps home-screen apps on a page with no controls).
+  let cardFile = null;
+  const loadCards = async () => { if (!cardFile) { const b = await (await fetch('reference_cards.pdf')).blob(); cardFile = new File([b], 'particle_field_reference_cards.pdf', { type: 'application/pdf' }); } return cardFile; };
+  $('#btnCards').onclick = async () => {
+    $('#cards').hidden = false; let share = false;
+    try { const f = await loadCards(); share = !!(navigator.canShare && navigator.canShare({ files: [f] })); } catch (e) {}
+    const touch = matchMedia('(pointer: coarse)').matches;
+    $('#cardsShare').hidden = $('#cardsShareHint').hidden = !share; $('#cardsPrint').hidden = $('#cardsSave').hidden = share && touch;   // on phones the share sheet does both, without leaving the app
+  };
+  $('#cardsShare').onclick = async () => { try { await navigator.share({ files: [await loadCards()], title: 'Particle Field reference cards' }); } catch (e) { if (e && e.name !== 'AbortError') toast('Sharing failed here. Use Download PDF instead.'); } };
+  $('#cardsPrint').onclick = async () => {   // print the PDF itself from a hidden frame, so the app stays on screen
+    try { const u = URL.createObjectURL(await loadCards()); let fr = $('#cardsFrame'); if (!fr) { fr = document.createElement('iframe'); fr.id = 'cardsFrame'; fr.style.cssText = 'position:fixed;width:0;height:0;border:0;left:-9999px'; document.body.appendChild(fr); }
+      fr.onload = () => { try { fr.contentWindow.focus(); fr.contentWindow.print(); } catch (e) { toast('Printing is not available here. Use Download PDF.'); } }; fr.src = u;
+    } catch (e) { toast('Printing is not available here. Use Download PDF.'); } };
+  $('#cardsClose').onclick = $('#cardsClose2').onclick = () => $('#cards').hidden = true;
+  $('#cards').addEventListener('click', e => { if (e.target.id === 'cards') $('#cards').hidden = true; });
   $('#btnAbout').onclick = openAbout; $('#btnAbout2').onclick = openAbout;
   $('#aboutClose').onclick = () => $('#about').hidden = true;
   $('#about').addEventListener('click', e => { if (e.target.id === 'about') $('#about').hidden = true; });
