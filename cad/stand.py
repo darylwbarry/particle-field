@@ -158,6 +158,17 @@ def make_tray():
     white = body.cut(black)
     return white, black
 
+def make_tray_plain():
+    """Plain white tray: same body as the calibration tray but no dots or labels.
+    It is the diffuser under a printed film (or paper) target."""
+    zt = TRAY_H
+    body = box(0, TRAY_W, 0, TRAY_D, zt - PLATE_T, zt)
+    body = body.union(ring(TRAY_W / 2, TRAY_D / 2, TRAY_W, TRAY_D, TRAY_W - 6, TRAY_D - 6, 0, zt))
+    body = body.union(box(-4, TRAY_W + 4, -3, 0.01, -2, zt))
+    body = body.union(cq.Workplane("XY").box(24, 6, zt + 2, centered=(True, False, False))
+                      .translate((TRAY_W / 2, -9, -2)).edges("|Z").fillet(2.5))
+    return body
+
 # ---------------- TEST COUPON (10-minute print to check dot quality before the full tray) ----------------
 def make_coupon(ni=13, nj=9, win=(5, 7, 4, 5), dot_depth=None, margin=4.0, t=1.0):
     """Flat plate, printed dot-face down like the tray. Dots are missing inside win = (i0, i1, j0, j1).
@@ -224,6 +235,7 @@ if __name__ == "__main__":
     # print orientation: top plane down (flip about X), both bodies share the same transform
     flip = lambda s: s.rotate((0, 0, 0), (1, 0, 0), 180).translate((0, 0, TRAY_H))
     export(flip(white), "tray_white"); export(flip(black), "tray_black")
+    export(flip(make_tray_plain()), "tray_plain_white")
     cw, cb = make_coupon(); export(cw, "coupon_white"); export(cb, "coupon_black")
     dk, dw = make_coupon_dark(); export(dk, "coupon_dark_black"); export(dw, "coupon_dark_white")
     asm_tray = cq.Assembly()
